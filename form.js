@@ -256,6 +256,7 @@ function applyLock() {
   $$('#fv-score input, #fv-score textarea, #fv-score button[data-act=mark], #fv-score button[data-act=sub], #fv-comments textarea, #fv-comments .mics button, #btn-submit').forEach(function (el) { el.disabled = !!F.locked; });
   $('#btn-insert').disabled = !!F.locked || !collatedHTML(F.D, false);
   $('#lockbanner').hidden = !F.locked;
+  $('#lockbanner').textContent = F.lockReason === 'closed' ? 'أُغلقت هذه السنة · This year has been closed. Marks are locked.' : 'انتهى الموعد · The deadline has passed. Marks are locked.';
 }
 function renderAll() {
   if (!F) return;
@@ -271,7 +272,7 @@ function setSync() {
   var el = $('#sync'); if (!el) return;
   var k, t;
   if (!F) { k = 'wait'; t = ''; }
-  else if (F.locked) { k = 'bad'; t = 'Locked · deadline passed'; }
+  else if (F.locked) { k = 'bad'; t = F.lockReason === 'closed' ? 'Locked · year closed' : 'Locked · deadline passed'; }
   else if (F.inflight || Object.keys(F.pending).length) { k = F.lastErr && F.lastErr.code === 'network' ? 'bad' : 'busy'; t = F.lastErr && F.lastErr.code === 'network' ? 'Offline · will retry' : 'Saving…'; }
   else if (F.lastErr) { k = 'bad'; t = 'Not saved'; }
   else { k = 'ok'; t = F.savedAt ? 'Saved ' + String(F.savedAt).slice(-5) : 'Saved'; }
@@ -302,7 +303,7 @@ async function doFlush(f, opt) {
     return r;
   } catch (e) {
     f.lastErr = e;
-    if (e.code === 'locked') { f.locked = true; f.pending = {}; }
+    if (e.code === 'locked') { f.locked = true; f.lockReason = /closed/.test(e.message || '') ? 'closed' : 'deadline'; f.pending = {}; }
     else if (e.code === 'network' || e.code === 'server' || e.code === 'auth') {
       Object.keys(snap).forEach(function (k) { if (!(k in f.pending)) f.pending[k] = snap[k]; });
       f.retry = (f.retry || 0) + 1;
@@ -324,7 +325,7 @@ async function doFlush(f, opt) {
 }
 function edit(patch) {
   if (!F) return;
-  if (F.locked) { MQ.toast('The deadline has passed. Marks are locked.', 'bad'); renderAll(); return; }
+  if (F.locked) { MQ.toast(F.lockReason === 'closed' ? 'This year has been closed. Marks are locked.' : 'The deadline has passed. Marks are locked.', 'bad'); renderAll(); return; }
   var f = flat(patch, '', {});
   applyFlat(F.D, f);
   Object.assign(F.pending, f);
@@ -343,7 +344,7 @@ async function refresh(force) {
     var r = await MQ.api('evaluation', { studentIts: f.student.its, evaluatorIts: f.evaluator.its });
     if (F !== f) return;
     MQ.skew = r.serverNow - Date.now();
-    f.deadline = r.deadline; f.locked = !!r.locked && !MQ.session.user.isAdmin;
+    f.deadline = r.deadline; f.locked = !!r.locked && !MQ.session.user.isAdmin; f.lockReason = r.lockReason || '';
     if (!force && (f.rev !== rev || f.inflight || Object.keys(f.pending).length)) { applyLock(); return; }
     if (force || r.savedAt !== f.savedAt || r.status !== f.status) {
       f.D = normData(r.data); applyFlat(f.D, f.pending);
@@ -487,7 +488,7 @@ var api = MQ.form = {
     MQ.skew = r.serverNow - Date.now();
     F = {
       student: r.student, evaluator: r.evaluator, D: normData(r.data), status: r.status, savedAt: r.savedAt, submittedAt: '',
-      deadline: r.deadline, locked: !!r.locked && !MQ.session.user.isAdmin, pending: {}, inflight: false, lastErr: null, timer: null, retry: 0,
+      deadline: r.deadline, locked: !!r.locked && !MQ.session.user.isAdmin, lockReason: r.lockReason || '', pending: {}, inflight: false, lastErr: null, timer: null, retry: 0,
       chain: Promise.resolve(), rev: 0, refreshing: false
     };
     preview = {};

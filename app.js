@@ -27,14 +27,25 @@ function markNav() { $$('#nav a').forEach(function (a) { a.setAttribute('aria-cu
 
 /* ---------- evaluator home ---------- */
 var STATUS = { complete: ['Submitted', 'مُرسَل'], in_progress: ['In progress', 'قيد العمل'], not_started: ['Not started', 'لم يبدأ'] };
+var homeData = null, homeYear = '';
 async function renderHome() {
   var box = $('#home-body');
   box.innerHTML = '<div class="pst"><div class="spin"></div><p class="en">Loading your evaluations…</p></div>';
-  var r;
-  try { r = await MQ.api('assignments'); }
+  try { homeData = await MQ.api('assignments'); }
   catch (e) { box.innerHTML = '<div class="card"><p class="bad">' + esc(e.message) + '</p><button type="button" class="btn gold" id="home-retry">Try again</button></div>'; $('#home-retry').onclick = renderHome; return; }
-  MQ.skew = r.serverNow - Date.now();
-  var a = r.assignments, done = a.filter(function (x) { return x.status === 'complete'; }).length;
+  MQ.skew = homeData.serverNow - Date.now();
+  if (!homeYear) homeYear = homeData.currentYear || '*';
+  drawHome();
+}
+function drawHome() {
+  var box = $('#home-body'), r = homeData;
+  var years = [];
+  r.assignments.forEach(function (x) { if (x.year && years.indexOf(x.year) < 0) years.push(x.year); });
+  years.sort().reverse();
+  var pick = years.length > 1;
+  if (pick && homeYear !== '*' && years.indexOf(homeYear) < 0) homeYear = '*';
+  var a = pick && homeYear !== '*' ? r.assignments.filter(function (x) { return x.year === homeYear; }) : r.assignments;
+  var done = a.filter(function (x) { return x.status === 'complete'; }).length;
   var h = '<div class="hhead"><div><h2>تقييماتي</h2><p class="en">My evaluations</p></div>';
   if (r.deadline) {
     var tl = MQ.timeLeft(r.deadline.ms);
@@ -42,14 +53,15 @@ async function renderHome() {
   } else h += '<div class="dlchip">No deadline set</div>';
   h += '</div>';
   if (r.locked) h += '<div class="banner bad">The deadline has passed. You can open your evaluations to read them, but marks can no longer be changed.</div>';
+  if (pick) h += '<label class="homeyear" dir="ltr">Year <select id="home-year" aria-label="Year"><option value="*">All years</option>' + years.map(function (y) { return '<option value="' + esc(y) + '">' + esc(y) + (y === r.currentYear ? ' (current)' : '') + '</option>'; }).join('') + '</select></label>';
   if (!a.length) {
-    h += '<div class="card"><p>No student has been assigned to you yet.</p><p class="en">If you expected to see students here, please contact the dissertations office.</p></div>';
+    h += '<div class="card"><p>No student has been assigned to you yet' + (pick && homeYear !== '*' ? ' for ' + esc(homeYear) : '') + '.</p><p class="en">If you expected to see students here, please contact the dissertations office.</p></div>';
   } else {
     h += '<p class="summ" dir="ltr"><b>' + done + '</b> of <b>' + a.length + '</b> submitted</p><div class="alist">';
     a.forEach(function (x) {
       var st = STATUS[x.status] || STATUS.not_started;
       h += '<a class="acard ' + x.status + '" href="#/eval/' + esc(x.its) + '"><div class="ahead"><h3 dir="auto">' + esc(x.name || ('ITS ' + x.its)) + '</h3><span class="stc ' + x.status + '">' + st[0] + '</span></div>' +
-        '<p class="en">ITS ' + esc(x.its) + (x.trno ? ' · TRNO ' + esc(x.trno) : '') + '</p>' +
+        '<p class="en">ITS ' + esc(x.its) + (x.trno ? ' · TRNO ' + esc(x.trno) : '') + (pick && x.year ? ' · <span class="yrchip">' + esc(x.year) + '</span>' : '') + (x.lockReason === 'closed' ? ' · <span class="yrchip cls">Closed</span>' : '') + '</p>' +
         (x.topic ? '<p class="atopic" dir="auto">' + esc(x.topic) + '</p>' : '<p class="atopic none">Topic not entered yet</p>') +
         '<div class="ameta"><span dir="ltr">' + x.marks + ' of 10 marked' + (x.marks ? ' · total <b>' + x.total + '</b>' : '') + '</span><span dir="ltr" class="' + (x.hasPdf ? 'ok' : 'bad') + '">' + (x.hasPdf ? 'PDF ready' : 'No PDF yet') + '</span></div>' +
         '<div class="pbar" aria-hidden="true"><i style="width:' + x.marks * 10 + '%"></i></div>' +
@@ -58,6 +70,7 @@ async function renderHome() {
     h += '</div>';
   }
   box.innerHTML = h;
+  var ys = $('#home-year'); if (ys) { ys.value = homeYear; ys.onchange = function () { homeYear = ys.value; drawHome(); }; }
 }
 
 /* ---------- routing ---------- */

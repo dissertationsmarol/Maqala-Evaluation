@@ -54,7 +54,7 @@
 <main id="admin" class="wrap wide" dir="ltr" lang="en" hidden>
   <div class="admhead">
     <div><h2>لوحة المكتب</h2><p class="en">Dissertations office dashboard</p></div>
-    <div class="tools"><span id="adm-time"></span><button type="button" class="btn ghost sm" id="adm-refresh">Refresh</button></div>
+    <div class="tools"><label id="adm-yearbox" class="yearbox" hidden>Year <select id="adm-year" aria-label="Year"></select></label><span id="adm-time"></span><button type="button" class="btn ghost sm" id="adm-refresh">Refresh</button></div>
   </div>
   <nav id="adm-tabs" class="subtabs" aria-label="Dashboard sections"></nav>
   <div id="adm-body"></div>
@@ -120,7 +120,7 @@
 </section>
 
 <div id="modal" class="sheet" hidden><div class="mbox" dir="ltr"><div class="mbody"></div></div></div>
-<div id="toast" hidden role="status" aria-live="polite"></div>
+<div id="toast" dir="auto" hidden role="status" aria-live="polite"></div>
 
 <script src="config.js"></script>
 <script src="rubric.js"></script>

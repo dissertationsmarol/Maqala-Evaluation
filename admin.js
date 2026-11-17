@@ -1,17 +1,48 @@
-/* Dissertations office dashboard: progress, analysis, files and checks, settings. */
+/* Dissertations office dashboard: progress, analysis, years, evaluator assignment, files and checks, settings. */
 (function () {
 'use strict';
 var MQ = window.MQ, $ = MQ.$, $$ = MQ.$$, esc = MQ.esc;
-var D = null, loadedAt = 0, sub = 'progress', derived = null, filter = { q: '', st: 'all' };
-var SUBS = [['progress', 'Progress'], ['analysis', 'Analysis'], ['files', 'Files & checks'], ['settings', 'Settings']];
+var D = null, V = null, loadedAt = 0, sub = 'progress', derived = null, filter = { q: '', st: 'all' };
+var yearSel = MQ.lsGet('mq.admyear') || '';                 // '' = the current year, '*' = every year, otherwise one year
+var asg = { q: '', st: 'all', same: false, limit: 50, sel: {} };
+var SUBS = [['progress', 'Progress'], ['analysis', 'Analysis'], ['years', 'Years'], ['assign', 'Assign'], ['files', 'Files & checks'], ['settings', 'Settings']];
+var BY_YEAR = { progress: 1, analysis: 1, assign: 1 };      // the tabs the year picker applies to
+
+/* ---------- the year picker: the dashboard shows one year at a time ---------- */
+function activeYear() {
+  if (!D || !D.years || !D.years.length) return '';
+  if (yearSel === '*') return '';
+  if (yearSel && D.years.some(function (y) { return y.year === yearSel; })) return yearSel;
+  return D.settings.currentYear || '';
+}
+function makeView() {
+  var y = activeYear();
+  var st = y ? D.students.filter(function (x) { return x.year === y; }) : D.students, set = {};
+  st.forEach(function (x) { set[x.its] = 1; });
+  V = { students: st, rows: y ? D.rows.filter(function (r) { return set[r.its]; }) : D.rows };
+}
+function drawYearPick() {
+  var box = $('#adm-yearbox'), sel = $('#adm-year');
+  var show = !!(D && D.years && D.years.length) && !!BY_YEAR[sub];
+  box.hidden = !show;
+  if (!show) return;
+  sel.innerHTML = '<option value="*">All years</option>' + D.years.map(function (y) { return '<option value="' + esc(y.year) + '">' + esc(y.year) + (y.current ? ' (current)' : '') + (y.closed ? ' · closed' : '') + '</option>'; }).join('');
+  sel.value = activeYear() || '*';
+}
+function tInfo(t) {
+  var bits = [];
+  if (t.gender) bits.push(t.gender === 'F' ? 'F' : 'M');
+  if (t.age) bits.push(t.age + 'y');
+  return bits.length ? ' · ' + bits.join(' ') : '';
+}
 
 /* ---------- derived numbers ---------- */
 function derive() {
   var rowBy = {};
-  D.rows.forEach(function (r) { rowBy[r.its + '|' + r.ev] = r; });
+  V.rows.forEach(function (r) { rowBy[r.its + '|' + r.ev] = r; });
   var tBy = {}; D.teachers.forEach(function (t) { tBy[t.its] = t; });
   var list = [];
-  D.students.forEach(function (s) {
+  V.students.forEach(function (s) {
     s.ev.forEach(function (ev, i) {
       if (!ev) return;
       var r = rowBy[s.its + '|' + ev] || null;
@@ -21,7 +52,7 @@ function derive() {
   var done = list.filter(function (a) { return a.st === 'complete'; });
   var byStu = {};
   list.forEach(function (a) { (byStu[a.s.its] = byStu[a.s.its] || []).push(a); });
-  var fully = D.students.filter(function (s) { var l = byStu[s.its]; return l && l.length && l.every(function (a) { return a.st === 'complete'; }); }).length;
+  var fully = V.students.filter(function (s) { var l = byStu[s.its]; return l && l.length && l.every(function (a) { return a.st === 'complete'; }); }).length;
   return { rowBy: rowBy, tBy: tBy, list: list, done: done, byStu: byStu, fully: fully,
     counts: { complete: done.length, in_progress: list.filter(function (a) { return a.st === 'in_progress'; }).length, not_started: list.filter(function (a) { return a.st === 'not_started'; }).length } };
 }
@@ -55,7 +86,7 @@ function pendingEvaluators() {
 function renderProgress() {
   var c = derived.counts, total = derived.list.length, dl = D.settings.deadline;
   var h = '<div class="tiles">' +
-    tile('Students', D.students.length, derived.fully + ' fully evaluated') +
+    tile('Students', V.students.length, derived.fully + ' fully evaluated') +
     tile('Evaluations assigned', total, D.teachers.filter(function (t) { return pendingCountOf(t.its, true); }).length + ' evaluators') +
     tile('Complete', c.complete, pct(c.complete, total) + '%', 'good') +
     tile('In progress', c.in_progress, '', 'warn') +
@@ -75,7 +106,7 @@ function renderProgress() {
   var evs = Object.keys(byEv).map(function (k) { return byEv[k]; }).sort(function (a, b) { return (b.n - b.c) - (a.n - a.c) || a.its.localeCompare(b.its); });
   h += '<div class="tw"><table class="tb"><thead><tr><th>Evaluator</th><th class="nm">Assigned</th><th class="nm">Done</th><th class="nm">In progress</th><th class="nm">Not started</th><th>Last saved</th><th></th></tr></thead><tbody>';
   evs.forEach(function (e) {
-    h += '<tr><td><b>' + esc(e.t ? e.t.name : 'Unknown') + '</b><br><span class="en">' + esc(e.its) + (e.t ? ' · ' + esc(e.t.email) : ' · not in teachers tab') + '</span></td><td class="nm">' + e.n + '</td><td class="nm">' + e.c + '</td><td class="nm">' + e.p + '</td><td class="nm">' + e.z + '</td><td class="en">' + esc(e.saved || '–') + '</td><td>' +
+    h += '<tr><td><b>' + esc(e.t ? e.t.name : 'Unknown') + '</b><br><span class="en">' + esc(e.its) + (e.t ? ' · ' + esc(e.t.email) : ' · not in teachers tab') + (e.t && e.t.mobile ? ' · <a href="tel:' + esc(e.t.mobile.replace(/[^\d+]/g, '')) + '">' + esc(e.t.mobile) + '</a>' : '') + '</span></td><td class="nm">' + e.n + '</td><td class="nm">' + e.c + '</td><td class="nm">' + e.p + '</td><td class="nm">' + e.z + '</td><td class="en">' + esc(e.saved || '–') + '</td><td>' +
       (e.n - e.c ? '<button type="button" class="btn sm ghost" data-a="notify" data-its="' + esc(e.its) + '">Notify</button>' : '<span class="ok">✓</span>') + '</td></tr>';
   });
   if (!evs.length) h += '<tr><td colspan="7" class="empty">No evaluator is assigned to any student yet. Fill evaluator_1_its, evaluator_2_its and evaluator_3_its in the students tab.</td></tr>';
@@ -89,7 +120,7 @@ function renderProgress() {
 function pendingCountOf(its, anyState) { return derived.list.some(function (a) { return a.ev === its; }); }
 function renderStudents() {
   var q = filter.q.trim().toLowerCase(), out = [];
-  D.students.forEach(function (s) {
+  V.students.forEach(function (s) {
     var l = derived.byStu[s.its] || [];
     if (q && (s.name + ' ' + s.its + ' ' + s.trno).toLowerCase().indexOf(q) < 0) return;
     if (filter.st === 'pending' && !l.some(function (a) { return a.st !== 'complete'; })) return;
@@ -102,7 +133,7 @@ function renderStudents() {
   var h = '<div class="tw"><table class="tb"><thead><tr><th>Student</th><th>TRNO</th><th>PDF</th><th>Evaluators</th><th class="nm">Average</th><th></th></tr></thead><tbody>';
   shown.forEach(function (s) {
     var l = derived.byStu[s.its] || [], totals = l.filter(function (a) { return a.st === 'complete'; }).map(function (a) { return a.r.t.t; });
-    h += '<tr><td><b dir="auto">' + esc(s.name || '—') + '</b><br><span class="en">' + esc(s.its) + '</span></td><td class="en">' + esc(s.trno || '–') + '</td>' +
+    h += '<tr><td><b dir="auto">' + esc(s.name || '—') + '</b><br><span class="en">' + esc(s.its) + (activeYear() ? '' : (s.year ? ' · ' + esc(s.year) : '')) + '</span></td><td class="en">' + esc(s.trno || '–') + '</td>' +
       '<td>' + (s.pdf ? '<span class="ok" title="' + esc(s.pdf) + '">✓</span>' + (s.pdfCount > 1 ? ' <span class="en">×' + s.pdfCount + '</span>' : '') : '<span class="bad">✗</span>') + '</td><td>' +
       (l.length ? l.map(function (a) {
         return '<span class="evpill ' + a.st + '" title="' + esc((a.t ? a.t.name : a.ev) + ' · ' + a.st.replace('_', ' ')) + '"><em>' + esc(a.t && a.t.name ? a.t.name : a.ev) + '</em>' + (a.st === 'not_started' ? '–' : a.r.t.t) + '</span>';
@@ -163,7 +194,7 @@ function renderAnalysis() {
 
   // disagreement
   var dis = [];
-  D.students.forEach(function (s) {
+  V.students.forEach(function (s) {
     var l = (derived.byStu[s.its] || []).filter(function (a) { return a.st === 'complete'; });
     if (l.length < 2) return;
     var t = l.map(function (a) { return a.r.t.t; }), gap = Math.max.apply(null, t) - Math.min.apply(null, t);
@@ -197,13 +228,164 @@ function renderFiles() {
     return '<div class="card"><h3 class="h3">' + title + ' (' + items.length + ')</h3><p class="note">' + note + '</p><ul class="plain">' + items.slice(0, 100).map(fn).join('') + '</ul>' + (items.length > 100 ? '<p class="note">…and ' + (items.length - 100) + ' more.</p>' : '') + '</div>';
   }
   if (f.error) h += '<div class="card"><h3 class="h3">Drive</h3><p class="bad">' + esc(f.error) + '</p></div>';
-  h += list('PDFs that match no student', 'The ITS in the file name is not in the students tab. Add the student, or ignore the file.', f.unmatched, function (x) { return '<li><span class="en">' + esc(x.name) + '</span></li>'; });
+  h += list('PDFs that match no student', 'The ITS in the file name is not in the students tab. Add the student, or ignore the file.', f.unmatched, function (x) { return '<li><span class="en">' + esc(x.name) + (x.year ? ' · year ' + esc(x.year) : '') + '</span>' + (x.note ? ' <span class="note">' + esc(x.note) + '</span>' : '') + '</li>'; });
   h += list('PDFs with a name the portal cannot read', 'Expected: Student Pdf Copy_[ITS]_TRNO_[TRNO]_[timestamp].pdf. These files are ignored.', f.unparsed, function (x) { return '<li><span class="en">' + esc(typeof x === 'string' ? x : x.name) + '</span></li>'; });
   h += list('Students with more than one PDF', 'The newest timestamp is used.', f.duplicates, function (x) { return '<li>' + esc(x.its) + ' · ' + x.count + ' files · using <span class="en">' + esc(x.using) + '</span></li>'; });
   h += list('TRNO in the file name differs from the sheet', 'Check which one is right.', f.trnoMismatch, function (x) { return '<li>' + esc(x.its) + ' · file ' + esc(x.fileTrno) + ' · sheet ' + esc(x.sheetTrno) + '</li>'; });
   var nopdf = D.students.filter(function (s) { return !s.pdf; });
-  h += list('Students with no PDF yet', 'Evaluators see “no PDF found” for these students.', nopdf, function (s) { return '<li>' + esc(s.name) + ' <span class="en">' + esc(s.its) + ' · TRNO ' + esc(s.trno) + '</span></li>'; });
+  h += list('Students with no PDF yet', 'Evaluators see “no PDF found” for these students.', nopdf, function (s) { return '<li>' + esc(s.name) + ' <span class="en">' + esc(s.its) + ' · TRNO ' + esc(s.trno) + (s.year ? ' · ' + esc(s.year) : '') + '</span></li>'; });
   $('#adm-body').innerHTML = h;
+}
+
+/* ---------- years: one Drive folder per year ---------- */
+function driveLink(id) { return 'https://drive.google.com/drive/folders/' + encodeURIComponent(id); }
+function renderYears() {
+  var ys = D.years || [], owner = D.settings.owner || 'the dissertations account';
+  var h = '<div class="card"><h3 class="h3">Years and their Drive folders</h3>' +
+    '<p class="note">Keep each year’s theses in a Drive folder of its own and register the folder here. The portal then reads each student’s PDF from the folder of that student’s year (the <i>year</i> column of the students tab). A student whose year is empty belongs to the current year. Anyone who can add files to the folder can upload; the portal reads them as <span class="en">' + esc(owner) + '</span>, so that account must be able to open the folder.</p>';
+  if (!ys.length) h += '<p class="note"><b>No year is registered yet.</b> Until you add one, the single Drive folder from Settings is used for everybody.</p>';
+  else {
+    h += '<div class="tw"><table class="tb"><thead><tr><th>Year</th><th class="nm">Students</th><th class="nm">With a PDF</th><th class="nm">PDFs in folder</th><th>Folder</th><th></th></tr></thead><tbody>';
+    ys.forEach(function (y) {
+      var miss = y.students - y.withPdf;
+      h += '<tr><td><b>' + esc(y.year) + '</b>' + (y.current ? ' <span class="badge cur">Current</span>' : '') + (y.closed ? ' <span class="badge cls">Closed</span>' : '') + (y.note ? '<br><span class="en">' + esc(y.note) + '</span>' : '') + '</td>' +
+        '<td class="nm">' + y.students + '</td><td class="nm ' + (miss ? 'bad' : '') + '">' + y.withPdf + (miss ? '<small> · ' + miss + ' missing</small>' : '') + '</td><td class="nm">' + y.files + '</td>' +
+        '<td>' + (y.folder ? '<a href="' + driveLink(y.folder) + '" target="_blank" rel="noopener">Open in Drive ↗</a>' : '<span class="bad">no folder</span>') + (y.error ? '<br><span class="bad en">' + esc(y.error) + '</span>' : '') + '</td>' +
+        '<td class="yacts">' + (y.current ? '' : '<button type="button" class="btn sm ghost" data-a="year-current" data-year="' + esc(y.year) + '">Make current</button> ') +
+        '<button type="button" class="btn sm ghost" data-a="year-closed" data-year="' + esc(y.year) + '" data-closed="' + (y.closed ? '0' : '1') + '">' + (y.closed ? 'Reopen' : 'Close year') + '</button> ' +
+        '<button type="button" class="btn sm ghost" data-a="year-remove" data-year="' + esc(y.year) + '">Remove</button></td></tr>';
+    });
+    h += '</tbody></table></div>' +
+      '<p class="note"><b>Close year</b> makes that year read-only for evaluators (administrators can still edit) and stops reminders for it, so you can set a new deadline for the next year without reopening old marks. <b>Remove</b> only takes the year off this list. Nothing in Drive is deleted.</p>';
+  }
+  if (D.legacyFolder) h += '<p class="note">The older single folder from Settings is still read as well. Its files fit any year.</p>';
+  h += '</div>';
+  h += '<div class="card"><h3 class="h3">Add a year, or change its folder</h3>' +
+    '<div class="yform"><label>Year<input type="text" id="y-name" dir="ltr" maxlength="20" placeholder="' + esc(String(new Date().getFullYear())) + '" autocomplete="off"></label>' +
+    '<label>Drive folder (address or ID)<input type="text" id="y-folder" dir="ltr" placeholder="https://drive.google.com/drive/folders/…" autocomplete="off"></label></div>' +
+    '<label class="chk"><input type="checkbox" id="y-cur"' + (ys.length ? '' : ' checked') + '> Make it the current year</label>' +
+    '<div class="acts" style="margin-top:10px"><button type="button" class="btn gold" data-a="year-save">Save year</button>' +
+    '<button type="button" class="btn ghost" data-a="year-create">Create a new Drive folder for this year</button></div>' +
+    '<p class="note">With <b>Create</b> the portal makes a folder named “Maqala <i>year</i>” in the Drive of <span class="en">' + esc(owner) + '</span> and registers it. Open it, share it with whoever uploads the PDFs, and drop the files in. Files must be named like <span class="en">Student Pdf Copy_[ITS]_TRNO_[TRNO]_[timestamp].pdf</span>. After you upload, press <i>Re-read the Drive folder</i> on the Files &amp; checks page, or wait five minutes.</p></div>';
+  $('#adm-body').innerHTML = h;
+}
+async function yearAction(act, b) {
+  var year = b.getAttribute('data-year');
+  try {
+    if (act === 'year-current') { await MQ.api('saveSettings', { currentYear: year }); MQ.toast(year + ' is now the current year.'); }
+    else if (act === 'year-closed') {
+      var close = b.getAttribute('data-closed') === '1';
+      if (close && !(await MQ.confirm('Close year ' + year + '? Evaluators will still be able to open their evaluations but not change marks, and reminders for this year stop. You can reopen it at any time.', 'Close year', true))) return;
+      await MQ.api('setYearClosed', { year: year, closed: close }); MQ.toast(year + (close ? ' is closed.' : ' is open again.'));
+    } else if (act === 'year-remove') {
+      if (!(await MQ.confirm('Remove ' + year + ' from the list? Students of that year will then be looked up in the older single folder from Settings. Nothing in Drive is deleted.', 'Remove', true))) return;
+      await MQ.api('removeYear', { year: year }); MQ.toast(year + ' removed from the list.');
+    } else if (act === 'year-save' || act === 'year-create') {
+      var name = $('#y-name').value.trim(), folder = $('#y-folder').value.trim(), cur = $('#y-cur').checked;
+      if (!name) { MQ.toast('Type the year first, for example ' + new Date().getFullYear() + '.', 'bad'); $('#y-name').focus(); return; }
+      b.disabled = true;
+      if (act === 'year-save') {
+        if (!folder) { MQ.toast('Paste the Drive folder address, or press “Create a new Drive folder”.', 'bad'); $('#y-folder').focus(); b.disabled = false; return; }
+        var r = await MQ.api('saveYear', { year: name, folder: folder, makeCurrent: cur });
+        MQ.toast('Saved: ' + name + ' reads from “' + r.folderName + '”.');
+      } else {
+        var c = await MQ.api('createYearFolder', { year: name, makeCurrent: cur });
+        MQ.modal('<h3 class="h3">Folder created</h3><p>“' + esc(c.folderName) + '” now exists in Drive and is registered for ' + esc(c.year) + '.</p><p><a class="btn gold" href="' + esc(c.url) + '" target="_blank" rel="noopener">Open the folder in Drive ↗</a></p><p class="note">Upload the PDFs there. Share the folder (Drive > Share) with anyone else who uploads. They need to be able to add files, not to edit the portal.</p><div class="mact"><button class="btn ghost" data-close-modal>Done</button></div>');
+      }
+    }
+    await load(true);
+  } catch (e) { MQ.toast(e.message, 'bad'); b.disabled = false; }
+}
+
+/* ---------- assign evaluators ---------- */
+function tLoad() {
+  var n = {};
+  V.students.forEach(function (st) { st.ev.forEach(function (e) { if (e) n[e] = (n[e] || 0) + 1; }); });
+  return n;
+}
+function teacherOptions(cur, st, load, same) {
+  var taken = st ? st.ev.filter(function (e) { return e && e !== cur; }) : [];
+  var list = D.teachers.filter(function (t) { return t.active || t.its === cur; });
+  if (same && st && st.gender) list = list.filter(function (t) { return !t.gender || t.gender === st.gender || t.its === cur; });
+  list = list.slice().sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); });
+  var h = '<option value="">' + (st ? '— none —' : '— clear the slot —') + '</option>';
+  list.forEach(function (t) {
+    h += '<option value="' + esc(t.its) + '"' + (t.its === cur ? ' selected' : '') + (taken.indexOf(t.its) >= 0 ? ' disabled' : '') + '>' + esc(t.name || t.its) + esc(tInfo(t)) + ' · ' + (load[t.its] || 0) + ' student' + ((load[t.its] || 0) === 1 ? '' : 's') + '</option>';
+  });
+  if (cur && !D.teachers.some(function (t) { return t.its === cur; })) h += '<option value="' + esc(cur) + '" selected>' + esc(cur) + ' (not in teachers tab)</option>';
+  return h;
+}
+function asgList() {
+  var q = asg.q.trim().toLowerCase();
+  return V.students.filter(function (st) {
+    if (q && (st.name + ' ' + st.its + ' ' + st.trno).toLowerCase().indexOf(q) < 0) return false;
+    var n = st.ev.filter(Boolean).length;
+    if (asg.st === 'none' && n) return false;
+    if (asg.st === 'few' && n >= 2) return false;
+    if (asg.st === 'two' && n < 2) return false;
+    return true;
+  });
+}
+function renderAssign() {
+  var y = activeYear(), hasG = D.teachers.some(function (t) { return t.gender; }) && V.students.some(function (st) { return st.gender; });
+  var h = '<div class="card"><div class="rowh"><h3 class="h3">Assign evaluators' + (y ? ' · ' + esc(y) : '') + '</h3><div class="acts">' +
+    '<input type="search" id="asq" placeholder="Search name, ITS or TRNO" value="' + esc(asg.q) + '" aria-label="Search students">' +
+    '<select id="asf" aria-label="Filter"><option value="all">All students</option><option value="none">No evaluator yet</option><option value="few">Fewer than two evaluators</option><option value="two">Two or more</option></select>' +
+    (hasG ? '<label class="chk"><input type="checkbox" id="asg"' + (asg.same ? ' checked' : '') + '> Same gender only</label>' : '') + '</div></div>' +
+    '<p class="note">Choose from the teachers tab. Every choice is saved to the students tab at once. The number after each name is how many students that evaluator already has' + (y ? ' in ' + esc(y) : '') + '. Tick students to give them the same evaluator in one go.</p>' +
+    '<div class="bulk" id="asbulk"></div><div id="asrows"></div></div>';
+  $('#adm-body').innerHTML = h;
+  $('#asf').value = asg.st;
+  renderBulk(); renderAsgRows();
+}
+function renderBulk() {
+  var n = Object.keys(asg.sel).length, load = tLoad();
+  $('#asbulk').innerHTML = '<span><b>' + n + '</b> selected</span>' +
+    '<label>Slot<select id="bk-slot"><option value="1">Evaluator 1</option><option value="2">Evaluator 2</option><option value="3">Evaluator 3</option></select></label>' +
+    '<label class="grow">Evaluator<select id="bk-ev">' + teacherOptions(null, null, load, false) + '</select></label>' +
+    '<button type="button" class="btn gold" data-a="assign-apply"' + (n ? '' : ' disabled') + '>Apply to selected</button>' +
+    '<button type="button" class="btn ghost" data-a="assign-all">Select all matching (' + asgList().length + ')</button>' +
+    '<button type="button" class="btn ghost" data-a="assign-none"' + (n ? '' : ' disabled') + '>Clear selection</button>';
+}
+function renderAsgRows() {
+  var list = asgList(), shown = list.slice(0, asg.limit), load = tLoad(), showYear = !activeYear();
+  var h = '<div class="tw"><table class="tb"><thead><tr><th></th><th>Student</th><th>Evaluator 1</th><th>Evaluator 2</th><th>Evaluator 3</th></tr></thead><tbody>';
+  shown.forEach(function (st) {
+    h += '<tr class="asrow"><td><input type="checkbox" data-sel="' + esc(st.its) + '"' + (asg.sel[st.its] ? ' checked' : '') + ' aria-label="Select ' + esc(st.name || st.its) + '"></td>' +
+      '<td><b dir="auto">' + esc(st.name || '—') + '</b><br><span class="en">' + esc(st.its) + (st.trno ? ' · TRNO ' + esc(st.trno) : '') + (showYear && st.year ? ' · ' + esc(st.year) : '') + (st.gender ? ' · ' + (st.gender === 'F' ? 'female' : 'male') : '') + (st.age ? ' · ' + esc(st.age) + 'y' : '') + '</span></td>';
+    [1, 2, 3].forEach(function (slot) {
+      var cur = st.ev[slot - 1] || '';
+      h += '<td><select data-slot="' + slot + '" data-its="' + esc(st.its) + '" aria-label="Evaluator ' + slot + ' for ' + esc(st.name || st.its) + '">' + teacherOptions(cur, st, load, asg.same) + '</select></td>';
+    });
+    h += '</tr>';
+  });
+  if (!shown.length) h += '<tr><td colspan="5" class="empty">No student matches.</td></tr>';
+  h += '</tbody></table></div>';
+  if (list.length > shown.length) h += '<p class="note">Showing ' + shown.length + ' of ' + list.length + '. <button type="button" class="btn sm ghost" data-a="assign-more">Show 50 more</button> or search to narrow the list.</p>';
+  $('#asrows').innerHTML = h;
+}
+async function assignOne(sel) {
+  var its = sel.getAttribute('data-its'), slot = +sel.getAttribute('data-slot'), val = sel.value;
+  try {
+    await MQ.api('setAssignment', { studentIts: its, slot: slot, teacherIts: val });
+    var st = D.students.filter(function (x) { return x.its === its; })[0]; if (st) st.ev[slot - 1] = val;
+    MQ.toast('Saved.');
+  } catch (e) { MQ.toast(e.message, 'bad'); }
+  renderBulk(); renderAsgRows();
+}
+async function assignBulk(b) {
+  var ids = Object.keys(asg.sel), slot = +$('#bk-slot').value, ev = $('#bk-ev').value;
+  if (!ids.length) return;
+  var who = ev ? (derived.tBy[ev] ? derived.tBy[ev].name : ev) : null;
+  if (!(await MQ.confirm(who ? 'Make ' + who + ' evaluator ' + slot + ' for ' + ids.length + ' student' + (ids.length === 1 ? '' : 's') + '?' : 'Clear evaluator ' + slot + ' for ' + ids.length + ' student' + (ids.length === 1 ? '' : 's') + '?', 'Apply', !who))) return;
+  b.disabled = true;
+  try {
+    var r = await MQ.api('setAssignments', { slot: slot, teacherIts: ev, studentIts: ids });
+    asg.sel = {};
+    await load(true);
+    MQ.toast(r.changed + ' changed' + (r.unchanged ? ', ' + r.unchanged + ' already set' : '') + (r.skipped.length ? ', ' + r.skipped.length + ' skipped' : '') + '.');
+    if (r.skipped.length) MQ.modal('<h3 class="h3">Not changed: ' + r.skipped.length + '</h3><ul class="plain">' + r.skipped.map(function (x) { return '<li>' + esc(x.name || x.its) + ' <span class="bad">' + esc(x.reason) + '</span></li>'; }).join('') + '</ul><div class="mact"><button class="btn gold" data-close-modal>Close</button></div>');
+  } catch (e) { MQ.toast(e.message, 'bad'); b.disabled = false; }
 }
 
 /* ---------- settings ---------- */
@@ -227,7 +409,7 @@ function renderSettings() {
     '<textarea id="s-admins" rows="4" dir="ltr" spellcheck="false">' + esc((s.adminEmails || []).join('\n')) + '</textarea>' +
     '<h3 class="h3 sp">Portal address</h3><p class="note">The GitHub Pages address, used for the link in reminder emails.</p><input type="url" id="s-portal" dir="ltr" value="' + esc(s.portalUrl || '') + '" placeholder="https://yourname.github.io/maqala/">' +
     '<h3 class="h3 sp">Reminder email</h3><p class="note">Reminders use the Jamea Saifiyah email layout. For the campus picture at the top, upload it to the same GitHub repository (for example as <i>email-banner.jpg</i>) and paste its web address here. Leave it blank for a plain navy banner. Save first, then send yourself a test.</p><input type="url" id="s-banner" dir="ltr" value="' + esc(s.emailBannerUrl || '') + '" placeholder="https://yourname.github.io/maqala/email-banner.jpg"><div class="acts" style="margin-top:10px"><button type="button" class="btn ghost" id="s-test">Send me a test email</button></div>' +
-    '<h3 class="h3 sp">Drive folder</h3><p class="note">The folder that holds the thesis PDFs. Paste the folder ID (the last part of its address) or the whole address.</p><input type="text" id="s-folder" dir="ltr" value="' + esc(s.driveFolder || '') + '" placeholder="1AbCdEfGh…">' +
+    '<h3 class="h3 sp">Older single Drive folder</h3><p class="note">Only needed if all your PDFs are in one folder. For one folder per year use the <a href="#/admin/years">Years</a> page. Paste the folder ID (the last part of its address) or the whole address.</p><input type="text" id="s-folder" dir="ltr" value="' + esc(s.driveFolder || '') + '" placeholder="1AbCdEfGh…">' +
     '<h3 class="h3 sp">Disagreement limit</h3><p class="note">Flag a student when two evaluators’ totals differ by at least this many marks.</p><input type="number" id="s-th" min="1" max="100" value="' + esc(s.threshold) + '" style="max-width:120px">' +
     '<div class="actbar"><button type="submit" class="btn gold">Save settings</button></div></form>';
   $('#adm-body').innerHTML = h;
@@ -261,12 +443,12 @@ async function openReport(its) {
 }
 function renderReport(r) {
   var s = r.student, tBy = derived.tBy;
-  var h = '<div class="rep"><div class="rowh"><div><h2 dir="auto">' + esc(s.name) + '</h2><p class="en">ITS ' + esc(s.its) + ' · TRNO ' + esc(s.trno || '–') + (r.pdf ? ' · ' + esc(r.pdf) : ' · no PDF found') + '</p></div><button type="button" class="btn ghost" data-close-modal>Close</button></div>';
+  var h = '<div class="rep"><div class="rowh"><div><h2 dir="auto">' + esc(s.name) + '</h2><p class="en">ITS ' + esc(s.its) + ' · TRNO ' + esc(s.trno || '–') + (s.year ? ' · year ' + esc(s.year) : '') + (s.gender ? ' · ' + (s.gender === 'F' ? 'female' : 'male') : '') + (s.age ? ' · ' + esc(s.age) + ' years' : '') + (s.mobile ? ' · ' + esc(s.mobile) : '') + (r.pdf ? ' · ' + esc(r.pdf) : ' · no PDF found') + '</p></div><button type="button" class="btn ghost" data-close-modal>Close</button></div>';
   if (s.topic) h += '<p dir="auto" class="rtopic">' + esc(s.topic) + '</p>';
   h += '<h3 class="h3 sp">Evaluators</h3><p class="note">Change who evaluates this student. The change is written to the students tab.</p><div class="slots">';
   [1, 2, 3].forEach(function (slot) {
     var cur = s.ev[slot - 1] || '';
-    h += '<label>Evaluator ' + slot + '<select data-slot="' + slot + '" data-its="' + esc(s.its) + '"><option value="">— none —</option>' + D.teachers.filter(function (t) { return t.active || t.its === cur; }).map(function (t) { return '<option value="' + esc(t.its) + '"' + (t.its === cur ? ' selected' : '') + '>' + esc(t.name) + ' · ' + esc(t.its) + '</option>'; }).join('') + (cur && !tBy[cur] ? '<option value="' + esc(cur) + '" selected>' + esc(cur) + ' (not in teachers tab)</option>' : '') + '</select></label>';
+    h += '<label>Evaluator ' + slot + '<select data-slot="' + slot + '" data-its="' + esc(s.its) + '"><option value="">— none —</option>' + D.teachers.filter(function (t) { return t.active || t.its === cur; }).map(function (t) { return '<option value="' + esc(t.its) + '"' + (t.its === cur ? ' selected' : '') + '>' + esc(t.name) + ' · ' + esc(t.its) + esc(tInfo(t)) + '</option>'; }).join('') + (cur && !tBy[cur] ? '<option value="' + esc(cur) + '" selected>' + esc(cur) + ' (not in teachers tab)</option>' : '') + '</select></label>';
   });
   h += '</div>';
   var evs = r.evaluations;
@@ -314,7 +496,7 @@ async function notify(its) {
   if (!(await MQ.confirm('Send a reminder email to ' + who + '? Each email lists that evaluator’s pending students and the deadline.', 'Send', false))) return;
   var b = MQ.modal('<p class="en">Sending…</p>');
   try {
-    var r = await MQ.api('notify', its ? { evaluatorIts: its } : {});
+    var ay = activeYear(), r = await MQ.api('notify', its ? { evaluatorIts: its, year: ay } : { year: ay });
     var h = '<h3 class="h3">Reminders sent: ' + r.sent.length + '</h3>' + (r.sent.length ? '<ul class="plain">' + r.sent.map(function (x) { return '<li>' + esc(x.name) + ' <span class="en">' + esc(x.email) + ' · ' + x.count + ' pending</span></li>'; }).join('') + '</ul>' : '');
     if (r.skipped.length) h += '<h3 class="h3 sp">Not sent: ' + r.skipped.length + '</h3><ul class="plain">' + r.skipped.map(function (x) { return '<li>' + esc(x.name || x.its) + ' <span class="bad">' + esc(x.reason) + '</span></li>'; }).join('') + '</ul>';
     b.innerHTML = h + '<div class="mact"><button class="btn gold" data-close-modal>Done</button></div>';
@@ -322,14 +504,14 @@ async function notify(its) {
 }
 function csvCell(v) { v = v == null ? '' : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
 function exportCsv() {
-  var head = ['student_its', 'trno', 'student_name', 'evaluator_its', 'evaluator_name', 'status'].concat(CRIT.map(function (c) { return 'c' + c.n; }), ['methodology', 'content', 'language', 'total', 'last_saved']);
+  var head = ['year', 'student_its', 'trno', 'student_name', 'evaluator_its', 'evaluator_name', 'status'].concat(CRIT.map(function (c) { return 'c' + c.n; }), ['methodology', 'content', 'language', 'total', 'last_saved']);
   var lines = [head.join(',')];
   derived.list.forEach(function (a) {
     var r = a.r;
-    lines.push([a.s.its, a.s.trno, a.s.name, a.ev, a.t ? a.t.name : '', a.st].concat(CRIT.map(function (c, i) { return r && r.marks[i] != null ? r.marks[i] : ''; }), r ? [r.t.m, r.t.c, r.t.f, r.t.t, r.saved] : ['', '', '', '', '']).map(csvCell).join(','));
+    lines.push([a.s.year, a.s.its, a.s.trno, a.s.name, a.ev, a.t ? a.t.name : '', a.st].concat(CRIT.map(function (c, i) { return r && r.marks[i] != null ? r.marks[i] : ''; }), r ? [r.t.m, r.t.c, r.t.f, r.t.t, r.saved] : ['', '', '', '', '']).map(csvCell).join(','));
   });
   var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'maqala-results-' + new Date().toISOString().slice(0, 10) + '.csv';
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'maqala-results-' + (activeYear() ? activeYear() + '-' : '') + new Date().toISOString().slice(0, 10) + '.csv';
   document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
 }
 
@@ -337,8 +519,9 @@ function exportCsv() {
 function drawSub() {
   $$('#adm-tabs a').forEach(function (a) { a.setAttribute('aria-current', a.getAttribute('data-sub') === sub ? 'page' : 'false'); });
   if (!D) return;
+  makeView(); drawYearPick();
   derived = derive();
-  ({ progress: renderProgress, analysis: renderAnalysis, files: renderFiles, settings: renderSettings })[sub]();
+  ({ progress: renderProgress, analysis: renderAnalysis, years: renderYears, assign: renderAssign, files: renderFiles, settings: renderSettings })[sub]();
 }
 async function load(quiet) {
   if (!quiet) $('#adm-body').innerHTML = '<div class="pst"><div class="spin"></div><p class="en">Loading the dashboard…</p></div>';
@@ -355,13 +538,29 @@ function mount() {
     if (a === 'notify-all') notify(''); else if (a === 'notify') notify(b.getAttribute('data-its'));
     else if (a === 'report') openReport(b.getAttribute('data-its'));
     else if (a === 'csv') exportCsv();
+    else if (/^year-/.test(a)) yearAction(a, b);
+    else if (a === 'assign-apply') assignBulk(b);
+    else if (a === 'assign-all') { asgList().forEach(function (st) { asg.sel[st.its] = true; }); renderBulk(); renderAsgRows(); }
+    else if (a === 'assign-none') { asg.sel = {}; renderBulk(); renderAsgRows(); }
+    else if (a === 'assign-more') { asg.limit += 50; renderAsgRows(); }
     else if (a === 'reload') load();
     else if (a === 'refresh-files') { b.disabled = true; MQ.api('refreshFiles').then(function (d) { D = d; drawSub(); MQ.toast('Folder re-read.'); }, function (err) { MQ.toast(err.message, 'bad'); b.disabled = false; }); }
   });
-  $('#admin').addEventListener('input', function (e) { if (e.target.id === 'stq') { filter.q = e.target.value; renderStudents(); } });
-  $('#admin').addEventListener('change', function (e) { if (e.target.id === 'stf') { filter.st = e.target.value; renderStudents(); } });
+  $('#admin').addEventListener('input', function (e) {
+    if (e.target.id === 'stq') { filter.q = e.target.value; renderStudents(); }
+    else if (e.target.id === 'asq') { asg.q = e.target.value; asg.limit = 50; renderBulk(); renderAsgRows(); }
+  });
+  $('#admin').addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.id === 'stf') { filter.st = t.value; renderStudents(); }
+    else if (t.id === 'asf') { asg.st = t.value; asg.limit = 50; renderBulk(); renderAsgRows(); }
+    else if (t.id === 'asg') { asg.same = t.checked; renderAsgRows(); }
+    else if (t.id === 'adm-year') { yearSel = t.value; MQ.lsSet('mq.admyear', yearSel); asg.sel = {}; asg.limit = 50; drawSub(); }
+    else if (t.matches && t.matches('select[data-slot][data-its]') && $('#asrows').contains(t)) assignOne(t);
+    else if (t.matches && t.matches('input[data-sel]')) { if (t.checked) asg.sel[t.getAttribute('data-sel')] = true; else delete asg.sel[t.getAttribute('data-sel')]; renderBulk(); }
+  });
   $('#adm-refresh').addEventListener('click', function () { load(true); });
-  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && !$('#admin').hidden && Date.now() - loadedAt > 60000 && sub !== 'settings') load(true); });
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && !$('#admin').hidden && Date.now() - loadedAt > 60000 && ['settings', 'years', 'assign'].indexOf(sub) < 0) load(true); });
 }
 MQ.admin = {
   show: function (s) {
