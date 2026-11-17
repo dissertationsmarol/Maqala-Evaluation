@@ -85,7 +85,8 @@ function pendingEvaluators() {
 }
 function renderProgress() {
   var c = derived.counts, total = derived.list.length, dl = D.settings.deadline;
-  var h = '<div class="tiles">' +
+  var me = MQ.session.user.teacher, mine = me ? D.students.filter(function (s) { return s.ev.indexOf(me.its) >= 0; }).length : 0;
+  var h = (mine ? '<div class="card mebanner"><p>You are also an evaluator: <b>' + mine + '</b> student' + (mine === 1 ? ' is' : 's are') + ' assigned to you.</p><a class="btn gold" href="#/mine">Open my evaluations</a></div>' : '') + '<div class="tiles">' +
     tile('Students', V.students.length, derived.fully + ' fully evaluated') +
     tile('Evaluations assigned', total, D.teachers.filter(function (t) { return pendingCountOf(t.its, true); }).length + ' evaluators') +
     tile('Complete', c.complete, pct(c.complete, total) + '%', 'good') +
@@ -112,7 +113,7 @@ function renderProgress() {
   if (!evs.length) h += '<tr><td colspan="7" class="empty">No evaluator is assigned to any student yet. Fill evaluator_1_its, evaluator_2_its and evaluator_3_its in the students tab.</td></tr>';
   h += '</tbody></table></div></div>';
 
-  h += '<div class="card"><div class="rowh"><h3 class="h3">Students</h3><div class="acts"><input type="search" id="stq" placeholder="Search name, ITS or TRNO" value="' + esc(filter.q) + '" aria-label="Search students"><select id="stf" aria-label="Filter"><option value="all">All</option><option value="pending">Anything pending</option><option value="complete">All complete</option><option value="nopdf">No PDF</option><option value="noev">No evaluator</option></select></div></div><div id="stlist"></div></div>';
+  h += '<div class="card"><div class="rowh"><h3 class="h3">Students</h3><div class="acts"><input type="search" id="stq" placeholder="Search students" title="Search by name, ITS, TRNO or takhassus" value="' + esc(filter.q) + '" aria-label="Search students"><select id="stf" aria-label="Filter"><option value="all">All</option><option value="pending">Anything pending</option><option value="complete">All complete</option><option value="nopdf">No PDF</option><option value="noev">No evaluator</option></select></div></div><div id="stlist"></div></div>';
   $('#adm-body').innerHTML = h;
   $('#stf').value = filter.st;
   renderStudents();
@@ -122,7 +123,7 @@ function renderStudents() {
   var q = filter.q.trim().toLowerCase(), out = [];
   V.students.forEach(function (s) {
     var l = derived.byStu[s.its] || [];
-    if (q && (s.name + ' ' + s.its + ' ' + s.trno).toLowerCase().indexOf(q) < 0) return;
+    if (q && (s.name + ' ' + s.its + ' ' + s.trno + ' ' + (s.takhassus || '')).toLowerCase().indexOf(q) < 0) return;
     if (filter.st === 'pending' && !l.some(function (a) { return a.st !== 'complete'; })) return;
     if (filter.st === 'complete' && !(l.length && l.every(function (a) { return a.st === 'complete'; }))) return;
     if (filter.st === 'nopdf' && s.pdf) return;
@@ -133,7 +134,7 @@ function renderStudents() {
   var h = '<div class="tw"><table class="tb"><thead><tr><th>Student</th><th>TRNO</th><th>PDF</th><th>Evaluators</th><th class="nm">Average</th><th></th></tr></thead><tbody>';
   shown.forEach(function (s) {
     var l = derived.byStu[s.its] || [], totals = l.filter(function (a) { return a.st === 'complete'; }).map(function (a) { return a.r.t.t; });
-    h += '<tr><td><b dir="auto">' + esc(s.name || '—') + '</b><br><span class="en">' + esc(s.its) + (activeYear() ? '' : (s.year ? ' · ' + esc(s.year) : '')) + '</span></td><td class="en">' + esc(s.trno || '–') + '</td>' +
+    h += '<tr><td><b dir="auto">' + esc(s.name || '—') + '</b><br><span class="en">' + esc(s.its) + (activeYear() ? '' : (s.year ? ' · ' + esc(s.year) : '')) + '</span>' + (s.takhassus ? '<br>' + MQ.tkChip(s.takhassus) : '') + '</td><td class="en">' + esc(s.trno || '–') + '</td>' +
       '<td>' + (s.pdf ? '<span class="ok" title="' + esc(s.pdf) + '">✓</span>' + (s.pdfCount > 1 ? ' <span class="en">×' + s.pdfCount + '</span>' : '') : '<span class="bad">✗</span>') + '</td><td>' +
       (l.length ? l.map(function (a) {
         return '<span class="evpill ' + a.st + '" title="' + esc((a.t ? a.t.name : a.ev) + ' · ' + a.st.replace('_', ' ')) + '"><em>' + esc(a.t && a.t.name ? a.t.name : a.ev) + '</em>' + (a.st === 'not_started' ? '–' : a.r.t.t) + '</span>';
@@ -318,7 +319,7 @@ function teacherOptions(cur, st, load, same) {
 function asgList() {
   var q = asg.q.trim().toLowerCase();
   return V.students.filter(function (st) {
-    if (q && (st.name + ' ' + st.its + ' ' + st.trno).toLowerCase().indexOf(q) < 0) return false;
+    if (q && (st.name + ' ' + st.its + ' ' + st.trno + ' ' + (st.takhassus || '')).toLowerCase().indexOf(q) < 0) return false;
     var n = st.ev.filter(Boolean).length;
     if (asg.st === 'none' && n) return false;
     if (asg.st === 'few' && n >= 2) return false;
@@ -329,7 +330,7 @@ function asgList() {
 function renderAssign() {
   var y = activeYear(), hasG = D.teachers.some(function (t) { return t.gender; }) && V.students.some(function (st) { return st.gender; });
   var h = '<div class="card"><div class="rowh"><h3 class="h3">Assign evaluators' + (y ? ' · ' + esc(y) : '') + '</h3><div class="acts">' +
-    '<input type="search" id="asq" placeholder="Search name, ITS or TRNO" value="' + esc(asg.q) + '" aria-label="Search students">' +
+    '<input type="search" id="asq" placeholder="Search students" title="Search by name, ITS, TRNO or takhassus" value="' + esc(asg.q) + '" aria-label="Search students">' +
     '<select id="asf" aria-label="Filter"><option value="all">All students</option><option value="none">No evaluator yet</option><option value="few">Fewer than two evaluators</option><option value="two">Two or more</option></select>' +
     (hasG ? '<label class="chk"><input type="checkbox" id="asg"' + (asg.same ? ' checked' : '') + '> Same gender only</label>' : '') + '</div></div>' +
     '<p class="note">Choose from the teachers tab. Every choice is saved to the students tab at once. The number after each name is how many students that evaluator already has' + (y ? ' in ' + esc(y) : '') + '. Tick students to give them the same evaluator in one go.</p>' +
@@ -352,7 +353,7 @@ function renderAsgRows() {
   var h = '<div class="tw"><table class="tb"><thead><tr><th></th><th>Student</th><th>Evaluator 1</th><th>Evaluator 2</th><th>Evaluator 3</th></tr></thead><tbody>';
   shown.forEach(function (st) {
     h += '<tr class="asrow"><td><input type="checkbox" data-sel="' + esc(st.its) + '"' + (asg.sel[st.its] ? ' checked' : '') + ' aria-label="Select ' + esc(st.name || st.its) + '"></td>' +
-      '<td><b dir="auto">' + esc(st.name || '—') + '</b><br><span class="en">' + esc(st.its) + (st.trno ? ' · TRNO ' + esc(st.trno) : '') + (showYear && st.year ? ' · ' + esc(st.year) : '') + (st.gender ? ' · ' + (st.gender === 'F' ? 'female' : 'male') : '') + (st.age ? ' · ' + esc(st.age) + 'y' : '') + '</span></td>';
+      '<td><b dir="auto">' + esc(st.name || '—') + '</b><br><span class="en">' + esc(st.its) + (st.trno ? ' · TRNO ' + esc(st.trno) : '') + (showYear && st.year ? ' · ' + esc(st.year) : '') + (st.gender ? ' · ' + (st.gender === 'F' ? 'female' : 'male') : '') + (st.age ? ' · ' + esc(st.age) + 'y' : '') + '</span>' + (st.takhassus ? '<br>' + MQ.tkChip(st.takhassus) : '') + '</td>';
     [1, 2, 3].forEach(function (slot) {
       var cur = st.ev[slot - 1] || '';
       h += '<td><select data-slot="' + slot + '" data-its="' + esc(st.its) + '" aria-label="Evaluator ' + slot + ' for ' + esc(st.name || st.its) + '">' + teacherOptions(cur, st, load, asg.same) + '</select></td>';
@@ -405,8 +406,10 @@ function renderSettings() {
   var h = '<form id="setform" class="card" autocomplete="off">' +
     '<h3 class="h3">Deadline for marking</h3><p class="note">Until this moment evaluators can change their marks. After it, their forms lock. Administrators can still edit. Time zone: <b>' + esc(s.tz) + '</b> (set in the Apps Script project).</p>' +
     '<div class="frow"><input type="datetime-local" id="s-dl" value="' + (dl ? esc(dl.text.replace(' ', 'T')) : '') + '" aria-label="Deadline"><button type="button" class="btn ghost" id="s-dl-clear">No deadline</button></div>' +
-    '<h3 class="h3 sp">Administrators</h3><p class="note">These accounts see the dashboard and can edit anything. One email per line or separated by commas. The Google account that deployed the web app (<span class="en">' + esc(s.owner || '') + '</span>) is always an administrator and is not listed here. You can also set <i>role = admin</i> for a teacher in the teachers tab.</p>' +
+    '<h3 class="h3 sp">Administrators</h3><p class="note">These accounts see the dashboard and can edit anything. One email per line or separated by commas. The Google account that deployed the web app (<span class="en">' + esc(s.owner || '') + '</span>) is always an administrator unless you untick the box below. You can also set <i>role = admin</i> for a teacher in the teachers tab.</p>' +
     '<textarea id="s-admins" rows="4" dir="ltr" spellcheck="false">' + esc((s.adminEmails || []).join('\n')) + '</textarea>' +
+    '<label class="chk"><input type="checkbox" id="s-ownadm"' + (s.ownerIsAdmin ? ' checked' : '') + '> <span><span class="en">' + esc(s.owner || '') + '</span> (the account that deployed the portal) is an administrator</span></label>' +
+    '<p class="note">Untick it if that account should only be an evaluator. List the real administrators above first, and remove that account\'s own address from the list. It takes effect only while another administrator exists, so you cannot lock yourself out.</p>' +
     '<h3 class="h3 sp">Portal address</h3><p class="note">The GitHub Pages address, used for the link in reminder emails.</p><input type="url" id="s-portal" dir="ltr" value="' + esc(s.portalUrl || '') + '" placeholder="https://yourname.github.io/maqala/">' +
     '<h3 class="h3 sp">Reminder email</h3><p class="note">Reminders use the Jamea Saifiyah email layout. For the campus picture at the top, upload it to the same GitHub repository (for example as <i>email-banner.jpg</i>) and paste its web address here. Leave it blank for a plain navy banner. Save first, then send yourself a test.</p><input type="url" id="s-banner" dir="ltr" value="' + esc(s.emailBannerUrl || '') + '" placeholder="https://yourname.github.io/maqala/email-banner.jpg"><div class="acts" style="margin-top:10px"><button type="button" class="btn ghost" id="s-test">Send me a test email</button></div>' +
     '<h3 class="h3 sp">Older single Drive folder</h3><p class="note">Only needed if all your PDFs are in one folder. For one folder per year use the <a href="#/admin/years">Years</a> page. Paste the folder ID (the last part of its address) or the whole address.</p><input type="text" id="s-folder" dir="ltr" value="' + esc(s.driveFolder || '') + '" placeholder="1AbCdEfGh…">' +
@@ -423,12 +426,20 @@ function renderSettings() {
   $('#setform').onsubmit = async function (e) {
     e.preventDefault();
     var body = { adminEmails: $('#s-admins').value, portalUrl: $('#s-portal').value.trim(), emailBannerUrl: $('#s-banner').value.trim(), driveFolder: $('#s-folder').value.trim(), threshold: $('#s-th').value };
+    body.ownerIsAdmin = $('#s-ownadm').checked;
+    if (s.ownerIsAdmin && !body.ownerIsAdmin && MQ.session.user.email === s.owner) {
+      if (!(await MQ.confirm(s.owner + ' will stop being an administrator once you save (unless it is listed above or has role = admin). It will then only see My evaluations. Continue?', 'Continue', true))) return;
+    }
     var v = $('#s-dl').value;
     if (v) { var ms = wallToMs(v, s.tz); if (isNaN(ms)) { MQ.toast('That deadline is not a valid date and time.', 'bad'); return; } body.deadlineIso = new Date(ms).toISOString(); }
     else body.deadlineIso = '';
     var btn = $('#setform button[type=submit]'); btn.disabled = true;
-    try { D.settings = await MQ.api('saveSettings', body); MQ.toast('Settings saved.'); await load(true); }
-    catch (err) { MQ.toast(err.message, 'bad'); }
+    try {
+      D.settings = await MQ.api('saveSettings', body); MQ.toast('Settings saved.');
+      var me = await MQ.api('session');
+      if (!me.user.isAdmin) { location.hash = '#/'; location.reload(); return; }       // this account just gave up its administrator rights
+      await load(true);
+    } catch (err) { MQ.toast(err.message, 'bad'); }
     btn.disabled = false;
   };
 }
@@ -443,7 +454,7 @@ async function openReport(its) {
 }
 function renderReport(r) {
   var s = r.student, tBy = derived.tBy;
-  var h = '<div class="rep"><div class="rowh"><div><h2 dir="auto">' + esc(s.name) + '</h2><p class="en">ITS ' + esc(s.its) + ' · TRNO ' + esc(s.trno || '–') + (s.year ? ' · year ' + esc(s.year) : '') + (s.gender ? ' · ' + (s.gender === 'F' ? 'female' : 'male') : '') + (s.age ? ' · ' + esc(s.age) + ' years' : '') + (s.mobile ? ' · ' + esc(s.mobile) : '') + (r.pdf ? ' · ' + esc(r.pdf) : ' · no PDF found') + '</p></div><button type="button" class="btn ghost" data-close-modal>Close</button></div>';
+  var h = '<div class="rep"><div class="rowh"><div><h2 dir="auto">' + esc(s.name) + '</h2><p class="en">ITS ' + esc(s.its) + ' · TRNO ' + esc(s.trno || '–') + (s.year ? ' · year ' + esc(s.year) : '') + (s.gender ? ' · ' + (s.gender === 'F' ? 'female' : 'male') : '') + (s.age ? ' · ' + esc(s.age) + ' years' : '') + (s.mobile ? ' · ' + esc(s.mobile) : '') + (r.pdf ? ' · ' + esc(r.pdf) : ' · no PDF found') + '</p>' + (s.takhassus ? '<p class="tkrow">' + MQ.tkChip(s.takhassus) + '</p>' : '') + '</div><button type="button" class="btn ghost" data-close-modal>Close</button></div>';
   if (s.topic) h += '<p dir="auto" class="rtopic">' + esc(s.topic) + '</p>';
   h += '<h3 class="h3 sp">Evaluators</h3><p class="note">Change who evaluates this student. The change is written to the students tab.</p><div class="slots">';
   [1, 2, 3].forEach(function (slot) {
@@ -504,11 +515,11 @@ async function notify(its) {
 }
 function csvCell(v) { v = v == null ? '' : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
 function exportCsv() {
-  var head = ['year', 'student_its', 'trno', 'student_name', 'evaluator_its', 'evaluator_name', 'status'].concat(CRIT.map(function (c) { return 'c' + c.n; }), ['methodology', 'content', 'language', 'total', 'last_saved']);
+  var head = ['year', 'student_its', 'trno', 'student_name', 'takhassus', 'evaluator_its', 'evaluator_name', 'status'].concat(CRIT.map(function (c) { return 'c' + c.n; }), ['methodology', 'content', 'language', 'total', 'last_saved']);
   var lines = [head.join(',')];
   derived.list.forEach(function (a) {
     var r = a.r;
-    lines.push([a.s.year, a.s.its, a.s.trno, a.s.name, a.ev, a.t ? a.t.name : '', a.st].concat(CRIT.map(function (c, i) { return r && r.marks[i] != null ? r.marks[i] : ''; }), r ? [r.t.m, r.t.c, r.t.f, r.t.t, r.saved] : ['', '', '', '', '']).map(csvCell).join(','));
+    lines.push([a.s.year, a.s.its, a.s.trno, a.s.name, a.s.takhassus || '', a.ev, a.t ? a.t.name : '', a.st].concat(CRIT.map(function (c, i) { return r && r.marks[i] != null ? r.marks[i] : ''; }), r ? [r.t.m, r.t.c, r.t.f, r.t.t, r.saved] : ['', '', '', '', '']).map(csvCell).join(','));
   });
   var blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'maqala-results-' + (activeYear() ? activeYear() + '-' : '') + new Date().toISOString().slice(0, 10) + '.csv';
