@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#0b1647">
+<title>تقييم المقالة الموسعة · Maqala evaluation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<!-- sign-in (also shown on top of the page when a session ends, so nothing typed is lost) -->
+<div id="login" class="login" hidden>
+  <div class="lcard">
+    <svg width="56" height="56" viewBox="0 0 44 44" aria-hidden="true"><g fill="none" stroke="#b08a2e" stroke-width="2"><rect x="11" y="11" width="22" height="22"/><rect x="11" y="11" width="22" height="22" transform="rotate(45 22 22)"/></g></svg>
+    <h1>تقييم المقالة الموسعة</h1>
+    <p class="en">Maqala evaluation portal · Dissertations office</p>
+    <p class="lead">سجّل الدخول بحساب الجامعة السيفية<br><span class="en">Sign in with your jameasaifiyah.edu Google account.</span></p>
+    <div id="gbtn"></div>
+    <p id="login-msg" class="lmsg" role="alert"></p>
+    <p class="foot">Only evaluators and staff listed by the dissertations office can enter.</p>
+  </div>
+</div>
+
+<!-- top bar for the home page and the dashboard -->
+<header id="appbar" class="top" hidden>
+  <div class="topin">
+    <a class="brand" href="#/">
+      <svg width="40" height="40" viewBox="0 0 44 44" aria-hidden="true"><g fill="none" stroke="#e6cf8a" stroke-width="2"><rect x="11" y="11" width="22" height="22"/><rect x="11" y="11" width="22" height="22" transform="rotate(45 22 22)"/></g></svg>
+      <div><h1>تقييم المقالة الموسعة</h1><span class="en">Maqala evaluation · Dissertations office</span></div>
+    </a>
+    <nav id="nav" class="nav" aria-label="Main"></nav>
+    <div class="who">
+      <button type="button" id="whobtn" aria-expanded="false" aria-haspopup="true"><b id="who-name"></b><span aria-hidden="true">▾</span></button>
+      <div id="whomenu" hidden>
+        <p><b id="who-role"></b></p>
+        <p id="who-mail"></p>
+        <button type="button" class="btn ghost" id="theme">Light / dark</button>
+        <button type="button" class="btn ghost" id="signout">Sign out</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- evaluator home -->
+<main id="home" class="wrap" hidden><div id="home-body"></div></main>
+
+<!-- dissertations office dashboard -->
+<main id="admin" class="wrap wide" dir="ltr" lang="en" hidden>
+  <div class="admhead">
+    <div><h2>لوحة المكتب</h2><p class="en">Dissertations office dashboard</p></div>
+    <div class="tools"><span id="adm-time"></span><button type="button" class="btn ghost sm" id="adm-refresh">Refresh</button></div>
+  </div>
+  <nav id="adm-tabs" class="subtabs" aria-label="Dashboard sections"></nav>
+  <div id="adm-body"></div>
+</main>
+
+<!-- reader: thesis PDF with the form in hover panels -->
+<section id="reader" hidden>
+  <div id="edgeT" class="edgeT"><button type="button" id="hT" class="handleT" aria-label="Show the toolbar" aria-expanded="false">⌄</button></div>
+  <div class="rbar" id="rbar">
+    <button type="button" class="btn ghost" id="rback">رجوع · Back</button>
+    <div class="rtitle"><b id="rname" dir="auto"></b><span id="rsub" class="en"></span></div>
+    <div id="pdfctl" class="pdfctl" hidden>
+      <button type="button" id="zout" aria-label="Zoom out">−</button><span id="zoomv">100%</span><button type="button" id="zin" aria-label="Zoom in">+</button><button type="button" id="zfit" aria-label="Fit width">⤢</button>
+      <input id="pgno" type="number" min="1" inputmode="numeric" aria-label="Page number"><span id="pgtot"></span>
+    </div>
+    <span id="rdl" class="dlchip"></span>
+    <button type="button" class="btn ghost" id="rfull" hidden title="Use the whole screen">⛶ Full screen</button>
+    <button type="button" class="btn ghost" id="rlayout">Form only</button>
+  </div>
+  <div id="rmain" class="rmain">
+    <div id="pdfarea"><div id="pdfpages"></div></div>
+    <div id="pdfstate" class="pdfstate" hidden></div>
+    <button type="button" id="rchip" class="rchip" aria-label="Open the marks panel" title="Open the marks panel">
+      <b id="ctot">0</b><small>/100</small><span class="sync" id="csync" data-k="wait"><i></i><span></span></span><em id="cpg"></em><span class="lk">🔒 Locked</span><span class="ob" id="cobo"></span>
+    </button>
+
+    <div id="edgeR" class="edge edgeR"><button type="button" id="hR" class="handle" aria-expanded="false" aria-controls="panelR">المعايير · Rubric</button></div>
+    <aside id="panelR" class="panel panelR" aria-label="Rubric" aria-hidden="true">
+      <div class="phead">
+        <b>المعايير <span class="en" style="color:var(--gold-hi)">Rubric</span></b>
+        <button type="button" class="pin" id="pinR" aria-pressed="false" title="Keep this panel open while you read"><span aria-hidden="true">📌</span> <span class="pt">تثبيت · Keep open</span></button>
+        <button type="button" class="ib" id="closeR" title="Close" aria-label="Close">✕</button>
+      </div>
+      <div class="pbody" id="pbodyR"><div class="fview" id="fv-rubric"></div></div>
+    </aside>
+
+    <div id="edgeL" class="edge edgeL"><button type="button" id="hL" class="handle" aria-expanded="false" aria-controls="panelL">التقييم · Marks</button></div>
+    <aside id="panelL" class="panel panelL" aria-label="Marks and comments" aria-hidden="true">
+      <div class="phead">
+        <div class="ptabs" role="tablist">
+          <button type="button" role="tab" data-tab="rubric" id="tab-rubric" aria-selected="false">المعايير</button>
+          <button type="button" role="tab" data-tab="score" aria-selected="true">التقييم</button>
+          <button type="button" role="tab" data-tab="comments" id="tab-comments" aria-selected="false">التعليقات</button>
+          <button type="button" role="tab" data-tab="result" aria-selected="false">النتيجة</button>
+        </div>
+        <button type="button" class="pin" id="pinL" aria-pressed="false" title="Keep the marks open while you read"><span aria-hidden="true">📌</span> <span class="pt">تثبيت · Keep open</span></button>
+        <button type="button" class="ib" id="closeL" title="Close" aria-label="Close">✕</button>
+      </div>
+      <div class="pstrip">
+        <div class="rtotal"><b id="rtot">0</b><small>/100</small></div>
+        <div class="rprogress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Criteria marked"><i id="rprog"></i></div>
+        <div id="sync" class="sync" data-k="wait"><i></i><span></span></div>
+      </div>
+      <div id="obo" class="banner warn" hidden></div>
+      <div id="lockbanner" class="banner bad" hidden>انتهى الموعد · The deadline has passed. Marks are locked.</div>
+      <div class="pbody" id="pbodyL">
+        <div class="fview" id="fv-score"></div>
+        <div class="fview" id="fv-comments" hidden></div>
+        <div class="fview" id="fv-result" hidden></div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<div id="modal" class="sheet" hidden><div class="mbox" dir="ltr"><div class="mbody"></div></div></div>
+<div id="toast" hidden role="status" aria-live="polite"></div>
+
+<script src="config.js"></script>
+<script src="rubric.js"></script>
+<script src="core.js"></script>
+<script src="form.js"></script>
+<script src="reader.js"></script>
+<script src="admin.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
