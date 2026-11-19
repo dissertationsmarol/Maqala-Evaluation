@@ -5,7 +5,7 @@ window.MAQALA_CONFIG = {
 
   // The OAuth Client ID from Google Cloud (ends with .apps.googleusercontent.com).
   // The same value goes in the settings tab of the spreadsheet (google_client_id).
-  GOOGLE_CLIENT_ID: '4790857483-dfsu661skbet2drpfhlpb6hgihvndfhg.apps.googleusercontent.com',
+  GOOGLE_CLIENT_ID: '293508832217-7d6ot77qh42rhfrkvj56d783qg23oj5g.apps.googleusercontent.com',
 
   // Only used to hint the Google account picker. The real check is the teachers tab.
   HOSTED_DOMAIN: 'jameasaifiyah.edu',
