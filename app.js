@@ -1,4 +1,4 @@
-(window.MQ_BUILD = window.MQ_BUILD || {}).app = '2026-11-19c';
+(window.MQ_BUILD = window.MQ_BUILD || {}).app = '2026-11-19d';
 /* Start-up, routing, the evaluator's home page. */
 /* All site files must be from the same build. A half-updated GitHub folder (or a cached old file) would otherwise crash with a
    cryptic "is not a function" message, so say plainly which file is old. Uses only plain DOM calls on purpose. */

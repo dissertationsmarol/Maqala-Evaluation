@@ -1,4 +1,4 @@
-(window.MQ_BUILD = window.MQ_BUILD || {}).core = '2026-11-19c';
+(window.MQ_BUILD = window.MQ_BUILD || {}).core = '2026-11-19d';
 /* Core: helpers, sign-in (Google Identity Services), API client, toast and dialogs. */
 (function () {
 'use strict';

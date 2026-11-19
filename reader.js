@@ -1,4 +1,4 @@
-(window.MQ_BUILD = window.MQ_BUILD || {}).reader = '2026-11-19c';
+(window.MQ_BUILD = window.MQ_BUILD || {}).reader = '2026-11-19d';
 /* The reader: the thesis fills the window. The rubric slides in from the right (temporary), the marks and comments from the left. */
 (function () {
 'use strict';

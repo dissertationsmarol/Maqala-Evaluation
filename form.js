@@ -1,4 +1,4 @@
-(window.MQ_BUILD = window.MQ_BUILD || {}).form = '2026-11-19c';
+(window.MQ_BUILD = window.MQ_BUILD || {}).form = '2026-11-19d';
 /* The evaluation form: criteria cards, rubric, result, comments, autosave to the spreadsheet. */
 (function () {
 'use strict';
