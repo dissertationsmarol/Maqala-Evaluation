@@ -1,3 +1,4 @@
+(window.MQ_BUILD = window.MQ_BUILD || {}).reader = '2026-11-19c';
 /* The reader: the thesis fills the window. The rubric slides in from the right (temporary), the marks and comments from the left. */
 (function () {
 'use strict';
@@ -6,6 +7,7 @@ var P = null;                 // the open PDF
 var layout = 'pdf';           // 'pdf' | 'form'
 var openT = {}, state = { R: { open: false, pin: false, eng: false }, L: { open: false, pin: false, eng: false } };
 var lastPointer = 'mouse', myOpen = 0, barT = 0;
+var OPEN = null;              // what is open: { r, its, ev, token, started } (started = the PDF download has begun)
 
 /* ---------------- pdf.js, loaded only when a PDF is opened ---------------- */
 var pdfjsP = null;
@@ -190,7 +192,7 @@ function setZoom(z) {
   relayout();
 }
 var resizeT = 0;
-window.addEventListener('resize', function () { clearTimeout(resizeT); resizeT = setTimeout(function () { if (P && P.doc && !$('#reader').hidden) { autoLayout(); relayout(); } }, 250); });
+window.addEventListener('resize', function () { clearTimeout(resizeT); resizeT = setTimeout(function () { if (P && P.doc && !$('#reader').hidden) relayout(); }, 250); });
 
 /* ---------------- state messages over the PDF area ---------------- */
 function pdfState(html) { var s = $('#pdfstate'); s.innerHTML = html || ''; s.hidden = !html; }
@@ -351,7 +353,6 @@ function setLayout(l, remember) {
   layout = l;
   var root = $('#reader');
   root.classList.toggle('formonly', l === 'form');
-  if (remember) MQ.lsSet('mq.layout', l);
   moveRubric();
   if (l === 'form') { unpinAll(); barShow(true); reflow(); }
   var t = MQ.form.currentTab();
@@ -360,12 +361,14 @@ function setLayout(l, remember) {
   $('#rlayout').textContent = l === 'pdf' ? 'Form only' : 'Show PDF';
   $('#rlayout').title = l === 'pdf' ? 'Hide the PDF and show the form full width (useful on a phone)' : 'Show the PDF full screen with the hover panels';
   MQ.form.renderMics();
+  if (l === 'pdf') startPdf();
   if (P && P.doc && l === 'pdf') setTimeout(relayout, 50);
 }
-function autoLayout() {
-  var pref = MQ.lsGet('mq.layout');
-  var want = pref || (window.innerWidth < 900 ? 'form' : 'pdf');
-  if (want !== layout) setLayout(want, false);
+/** Starts the PDF download once. Marks entry only does not call this until the person asks for the PDF. */
+function startPdf() {
+  if (!OPEN || OPEN.started) return;
+  OPEN.started = true;
+  loadPdf(OPEN.r.pdf, OPEN.its, OPEN.ev, OPEN.token, OPEN.r.pdfError);
 }
 
 /* ---------------- header ---------------- */
@@ -381,6 +384,7 @@ function fillBar(r) {
   var F = MQ.form.state();
   $('#rname').textContent = F.student.name || ('ITS ' + F.student.its);
   $('#rsub').textContent = 'ITS ' + F.student.its + (F.student.trno ? ' · TRNO ' + F.student.trno : '');
+  $('#rtk').textContent = F.student.takhassus ? '\u0627\u0644\u062a\u062e\u0635\u0635 \u00b7 ' + F.student.takhassus : '';
   var u = MQ.session.user, obo = $('#obo');
   var mine = u.teacher && u.teacher.its === F.evaluator.its;
   obo.hidden = !!mine;
@@ -413,15 +417,16 @@ var api = MQ.reader = {
     $('#rback').addEventListener('click', function () { api.back(); });
   },
   back: function () {
-    var h = MQ.prevHash && !/^#\/eval/.test(MQ.prevHash) ? MQ.prevHash : (MQ.session.user.isAdmin ? '#/admin' : '#/');
+    var h = MQ.prevHash && !/^#\/(eval|marks)\//.test(MQ.prevHash) ? MQ.prevHash : (MQ.session.user.isAdmin ? '#/admin' : '#/');
     location.hash = h;
   },
-  open: async function (studentIts, evIts) {
+  open: async function (studentIts, evIts, opts) {
     api.mount();
-    var token = ++myOpen;
+    var token = ++myOpen, mode = opts && opts.mode === 'marks' ? 'marks' : 'pdf';
+    OPEN = null;
     $('#reader').classList.remove('showstate');
     P = null; closePdfDoc();
-    $('#pdfpages').innerHTML = ''; $('#pdfctl').hidden = true; $('#rname').textContent = 'Loading…'; $('#rsub').textContent = '';
+    $('#pdfpages').innerHTML = ''; $('#pdfctl').hidden = true; $('#rname').textContent = 'Loading…'; $('#rsub').textContent = ''; $('#rtk').textContent = '';
     $('#obo').hidden = true; $('#lockbanner').hidden = true;
     pdfState('<div class="pst"><div class="spin" aria-hidden="true"></div><p class="en">Opening the evaluation…</p></div>');
     var r;
@@ -436,20 +441,20 @@ var api = MQ.reader = {
     }
     if (token !== myOpen) return;
     unpinAll(); clearTimeout(barT);
-    layout = null; autoLayout();
-    if (!layout) setLayout('pdf', false);
-    MQ.form.setTab(layout === 'form' ? 'rubric' : 'score');          // every thesis starts with the rubric (phone) or the marks (PDF)
+    OPEN = { r: r, its: studentIts, ev: evIts, token: token, started: false };
+    layout = null;
+    setLayout(mode === 'marks' ? 'form' : 'pdf', false);            // the button the person pressed decides; the PDF is fetched only when it is shown
+    MQ.form.setTab('score');
     fillBar(r);
-    loadPdf(r.pdf, studentIts, evIts, token, r.pdfError);
     // the toolbar greets the person for a moment, then slides away; a one-time hint explains the two sides
     barShow(true);
     if (layout === 'pdf') {
       barHideSoon(3500);
-      if (!MQ.lsGet('mq.seen.hint2')) { MQ.lsSet('mq.seen.hint2', '1'); MQ.toast('Move the pointer to the right edge for the rubric and to the left edge for marks and comments. Click the PDF to hide them again. 📌 keeps the marks open while you read.', 'hint'); }
+      if (!MQ.lsGet('mq.seen.hint2')) { MQ.lsSet('mq.seen.hint2', '1'); MQ.toast(window.matchMedia && window.matchMedia('(pointer:coarse)').matches ? 'Tap the side tabs, or the total at the bottom, to open the marks and the rubric. Tap the PDF to hide them again. 📌 keeps them open while you read.' : 'Move the pointer to the right edge for the rubric and to the left edge for marks and comments. Click the PDF to hide them again. 📌 keeps the marks open while you read.', 'hint'); }
     }
   },
   close: async function () {
-    myOpen++;
+    myOpen++; OPEN = null;
     closePdfDoc(); P = null;
     clearTimeout(barT); unpinAll();
     if (document.fullscreenElement) { try { document.exitFullscreen(); } catch (e) { /* ignore */ } }

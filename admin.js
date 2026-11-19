@@ -1,7 +1,8 @@
+(window.MQ_BUILD = window.MQ_BUILD || {}).admin = '2026-11-19c';
 /* Dissertations office dashboard: progress, analysis, years, evaluator assignment, files and checks, settings. */
 (function () {
 'use strict';
-var MQ = window.MQ, $ = MQ.$, $$ = MQ.$$, esc = MQ.esc;
+var MQ = window.MQ, $ = MQ.$, $$ = MQ.$$, esc = MQ.esc, SLOTS = MQ.SLOTS, slotName = MQ.slotName;
 var D = null, V = null, loadedAt = 0, sub = 'progress', derived = null, filter = { q: '', st: 'all' };
 var yearSel = MQ.lsGet('mq.admyear') || '';                 // '' = the current year, '*' = every year, otherwise one year
 var asg = { q: '', st: 'all', same: false, limit: 50, sel: {} };
@@ -342,7 +343,7 @@ function renderAssign() {
 function renderBulk() {
   var n = Object.keys(asg.sel).length, load = tLoad();
   $('#asbulk').innerHTML = '<span><b>' + n + '</b> selected</span>' +
-    '<label>Slot<select id="bk-slot"><option value="1">Evaluator 1</option><option value="2">Evaluator 2</option><option value="3">Evaluator 3</option></select></label>' +
+    '<label>Slot<select id="bk-slot">' + SLOTS.map(function (n) { return '<option value="' + n + '">' + slotName(n) + '</option>'; }).join('') + '</select></label>' +
     '<label class="grow">Evaluator<select id="bk-ev">' + teacherOptions(null, null, load, false) + '</select></label>' +
     '<button type="button" class="btn gold" data-a="assign-apply"' + (n ? '' : ' disabled') + '>Apply to selected</button>' +
     '<button type="button" class="btn ghost" data-a="assign-all">Select all matching (' + asgList().length + ')</button>' +
@@ -350,17 +351,18 @@ function renderBulk() {
 }
 function renderAsgRows() {
   var list = asgList(), shown = list.slice(0, asg.limit), load = tLoad(), showYear = !activeYear();
-  var h = '<div class="tw"><table class="tb"><thead><tr><th></th><th>Student</th><th>Evaluator 1</th><th>Evaluator 2</th><th>Evaluator 3</th></tr></thead><tbody>';
+  var h = '<div class="tw"><table class="tb"><thead><tr><th></th><th>Student</th><th>Evaluators</th></tr></thead><tbody>';
   shown.forEach(function (st) {
     h += '<tr class="asrow"><td><input type="checkbox" data-sel="' + esc(st.its) + '"' + (asg.sel[st.its] ? ' checked' : '') + ' aria-label="Select ' + esc(st.name || st.its) + '"></td>' +
       '<td><b dir="auto">' + esc(st.name || '—') + '</b><br><span class="en">' + esc(st.its) + (st.trno ? ' · TRNO ' + esc(st.trno) : '') + (showYear && st.year ? ' · ' + esc(st.year) : '') + (st.gender ? ' · ' + (st.gender === 'F' ? 'female' : 'male') : '') + (st.age ? ' · ' + esc(st.age) + 'y' : '') + '</span>' + (st.takhassus ? '<br>' + MQ.tkChip(st.takhassus) : '') + '</td>';
-    [1, 2, 3].forEach(function (slot) {
+    h += '<td><div class="slotgrid">';
+    SLOTS.forEach(function (slot) {
       var cur = st.ev[slot - 1] || '';
-      h += '<td><select data-slot="' + slot + '" data-its="' + esc(st.its) + '" aria-label="Evaluator ' + slot + ' for ' + esc(st.name || st.its) + '">' + teacherOptions(cur, st, load, asg.same) + '</select></td>';
+      h += '<label><span>' + slotName(slot) + '</span><select data-slot="' + slot + '" data-its="' + esc(st.its) + '" aria-label="' + slotName(slot) + ' for ' + esc(st.name || st.its) + '">' + teacherOptions(cur, st, load, asg.same) + '</select></label>';
     });
-    h += '</tr>';
+    h += '</div></td></tr>';
   });
-  if (!shown.length) h += '<tr><td colspan="5" class="empty">No student matches.</td></tr>';
+  if (!shown.length) h += '<tr><td colspan="3" class="empty">No student matches.</td></tr>';
   h += '</tbody></table></div>';
   if (list.length > shown.length) h += '<p class="note">Showing ' + shown.length + ' of ' + list.length + '. <button type="button" class="btn sm ghost" data-a="assign-more">Show 50 more</button> or search to narrow the list.</p>';
   $('#asrows').innerHTML = h;
@@ -378,7 +380,7 @@ async function assignBulk(b) {
   var ids = Object.keys(asg.sel), slot = +$('#bk-slot').value, ev = $('#bk-ev').value;
   if (!ids.length) return;
   var who = ev ? (derived.tBy[ev] ? derived.tBy[ev].name : ev) : null;
-  if (!(await MQ.confirm(who ? 'Make ' + who + ' evaluator ' + slot + ' for ' + ids.length + ' student' + (ids.length === 1 ? '' : 's') + '?' : 'Clear evaluator ' + slot + ' for ' + ids.length + ' student' + (ids.length === 1 ? '' : 's') + '?', 'Apply', !who))) return;
+  if (!(await MQ.confirm(who ? 'Make ' + who + ' ' + slotName(slot) + ' for ' + ids.length + ' student' + (ids.length === 1 ? '' : 's') + '?' : 'Clear ' + slotName(slot) + ' for ' + ids.length + ' student' + (ids.length === 1 ? '' : 's') + '?', 'Apply', !who))) return;
   b.disabled = true;
   try {
     var r = await MQ.api('setAssignments', { slot: slot, teacherIts: ev, studentIts: ids });
@@ -411,6 +413,7 @@ function renderSettings() {
     '<label class="chk"><input type="checkbox" id="s-ownadm"' + (s.ownerIsAdmin ? ' checked' : '') + '> <span><span class="en">' + esc(s.owner || '') + '</span> (the account that deployed the portal) is an administrator</span></label>' +
     '<p class="note">Untick it if that account should only be an evaluator. List the real administrators above first, and remove that account\'s own address from the list. It takes effect only while another administrator exists, so you cannot lock yourself out.</p>' +
     '<h3 class="h3 sp">Portal address</h3><p class="note">The GitHub Pages address, used for the link in reminder emails.</p><input type="url" id="s-portal" dir="ltr" value="' + esc(s.portalUrl || '') + '" placeholder="https://yourname.github.io/maqala/">' +
+    '<h3 class="h3 sp">Send emails as</h3><p class="note">Optional. Reminders normally leave from <span class="en">' + esc(s.owner || '') + '</span>, the account that deployed the portal. To send them from another address, such as the dissertations mailbox, type it here. That address must first be added as a verified <i>Send mail as</i> address in the Gmail of <span class="en">' + esc(s.owner || '') + '</span> (see SETUP.md). If Gmail refuses it, mail is sent from the deploying account with this address as Reply-To. Use <b>Send me a test email</b> below to check.</p><input type="email" id="s-mailfrom" dir="ltr" value="' + esc(s.mailFrom || '') + '" placeholder="dissertations.marol@jameasaifiyah.edu">' +
     '<h3 class="h3 sp">Reminder email</h3><p class="note">Reminders use the Jamea Saifiyah email layout. For the campus picture at the top, upload it to the same GitHub repository (for example as <i>email-banner.jpg</i>) and paste its web address here. Leave it blank for a plain navy banner. Save first, then send yourself a test.</p><input type="url" id="s-banner" dir="ltr" value="' + esc(s.emailBannerUrl || '') + '" placeholder="https://yourname.github.io/maqala/email-banner.jpg"><div class="acts" style="margin-top:10px"><button type="button" class="btn ghost" id="s-test">Send me a test email</button></div>' +
     '<h3 class="h3 sp">Older single Drive folder</h3><p class="note">Only needed if all your PDFs are in one folder. For one folder per year use the <a href="#/admin/years">Years</a> page. Paste the folder ID (the last part of its address) or the whole address.</p><input type="text" id="s-folder" dir="ltr" value="' + esc(s.driveFolder || '') + '" placeholder="1AbCdEfGh…">' +
     '<h3 class="h3 sp">Disagreement limit</h3><p class="note">Flag a student when two evaluators’ totals differ by at least this many marks.</p><input type="number" id="s-th" min="1" max="100" value="' + esc(s.threshold) + '" style="max-width:120px">' +
@@ -419,13 +422,17 @@ function renderSettings() {
   $('#s-dl-clear').onclick = function () { $('#s-dl').value = ''; };
   $('#s-test').onclick = async function () {
     var b = this; b.disabled = true;
-    try { var r = await MQ.api('testEmail'); MQ.toast('A test email was sent to ' + r.to + '.'); }
+    try {
+      var r = await MQ.api('testEmail');
+      if (r.via === 'fallback') MQ.toast('Sent to ' + r.to + ', but Gmail refused “' + r.replyTo + '” as the sender (' + r.note + '). It went out from ' + r.from + ' with Reply-To ' + r.replyTo + '. See “Send mail as” in SETUP.md.', 'bad');
+      else MQ.toast('A test email was sent to ' + r.to + (r.via === 'alias' ? ', sent from ' + r.from + '.' : ', sent from ' + r.from + '.'));
+    }
     catch (e) { MQ.toast(e.message, 'bad'); }
     b.disabled = false;
   };
   $('#setform').onsubmit = async function (e) {
     e.preventDefault();
-    var body = { adminEmails: $('#s-admins').value, portalUrl: $('#s-portal').value.trim(), emailBannerUrl: $('#s-banner').value.trim(), driveFolder: $('#s-folder').value.trim(), threshold: $('#s-th').value };
+    var body = { adminEmails: $('#s-admins').value, portalUrl: $('#s-portal').value.trim(), mailFrom: $('#s-mailfrom').value.trim(), emailBannerUrl: $('#s-banner').value.trim(), driveFolder: $('#s-folder').value.trim(), threshold: $('#s-th').value };
     body.ownerIsAdmin = $('#s-ownadm').checked;
     if (s.ownerIsAdmin && !body.ownerIsAdmin && MQ.session.user.email === s.owner) {
       if (!(await MQ.confirm(s.owner + ' will stop being an administrator once you save (unless it is listed above or has role = admin). It will then only see My evaluations. Continue?', 'Continue', true))) return;
@@ -457,9 +464,9 @@ function renderReport(r) {
   var h = '<div class="rep"><div class="rowh"><div><h2 dir="auto">' + esc(s.name) + '</h2><p class="en">ITS ' + esc(s.its) + ' · TRNO ' + esc(s.trno || '–') + (s.year ? ' · year ' + esc(s.year) : '') + (s.gender ? ' · ' + (s.gender === 'F' ? 'female' : 'male') : '') + (s.age ? ' · ' + esc(s.age) + ' years' : '') + (s.mobile ? ' · ' + esc(s.mobile) : '') + (r.pdf ? ' · ' + esc(r.pdf) : ' · no PDF found') + '</p>' + (s.takhassus ? '<p class="tkrow">' + MQ.tkChip(s.takhassus) + '</p>' : '') + '</div><button type="button" class="btn ghost" data-close-modal>Close</button></div>';
   if (s.topic) h += '<p dir="auto" class="rtopic">' + esc(s.topic) + '</p>';
   h += '<h3 class="h3 sp">Evaluators</h3><p class="note">Change who evaluates this student. The change is written to the students tab.</p><div class="slots">';
-  [1, 2, 3].forEach(function (slot) {
+  SLOTS.forEach(function (slot) {
     var cur = s.ev[slot - 1] || '';
-    h += '<label>Evaluator ' + slot + '<select data-slot="' + slot + '" data-its="' + esc(s.its) + '"><option value="">— none —</option>' + D.teachers.filter(function (t) { return t.active || t.its === cur; }).map(function (t) { return '<option value="' + esc(t.its) + '"' + (t.its === cur ? ' selected' : '') + '>' + esc(t.name) + ' · ' + esc(t.its) + esc(tInfo(t)) + '</option>'; }).join('') + (cur && !tBy[cur] ? '<option value="' + esc(cur) + '" selected>' + esc(cur) + ' (not in teachers tab)</option>' : '') + '</select></label>';
+    h += '<label>' + slotName(slot) + '<select data-slot="' + slot + '" data-its="' + esc(s.its) + '"><option value="">— none —</option>' + D.teachers.filter(function (t) { return t.active || t.its === cur; }).map(function (t) { return '<option value="' + esc(t.its) + '"' + (t.its === cur ? ' selected' : '') + '>' + esc(t.name) + ' · ' + esc(t.its) + esc(tInfo(t)) + '</option>'; }).join('') + (cur && !tBy[cur] ? '<option value="' + esc(cur) + '" selected>' + esc(cur) + ' (not in teachers tab)</option>' : '') + '</select></label>';
   });
   h += '</div>';
   var evs = r.evaluations;
@@ -510,6 +517,7 @@ async function notify(its) {
     var ay = activeYear(), r = await MQ.api('notify', its ? { evaluatorIts: its, year: ay } : { year: ay });
     var h = '<h3 class="h3">Reminders sent: ' + r.sent.length + '</h3>' + (r.sent.length ? '<ul class="plain">' + r.sent.map(function (x) { return '<li>' + esc(x.name) + ' <span class="en">' + esc(x.email) + ' · ' + x.count + ' pending</span></li>'; }).join('') + '</ul>' : '');
     if (r.skipped.length) h += '<h3 class="h3 sp">Not sent: ' + r.skipped.length + '</h3><ul class="plain">' + r.skipped.map(function (x) { return '<li>' + esc(x.name || x.its) + ' <span class="bad">' + esc(x.reason) + '</span></li>'; }).join('') + '</ul>';
+    if (r.via === 'fallback') h += '<p class="bad">Gmail refused the “Send emails as” address (' + esc(r.note) + '), so these went out from ' + esc(r.from) + '. Check Settings > Send emails as.</p>';
     b.innerHTML = h + '<div class="mact"><button class="btn gold" data-close-modal>Done</button></div>';
   } catch (e) { b.innerHTML = '<p class="bad">' + esc(e.message) + '</p><div class="mact"><button class="btn ghost" data-close-modal>Close</button></div>'; }
 }

@@ -1,6 +1,22 @@
+(window.MQ_BUILD = window.MQ_BUILD || {}).app = '2026-11-19c';
 /* Start-up, routing, the evaluator's home page. */
+/* All site files must be from the same build. A half-updated GitHub folder (or a cached old file) would otherwise crash with a
+   cryptic "is not a function" message, so say plainly which file is old. Uses only plain DOM calls on purpose. */
+(function () {
+  var b = window.MQ_BUILD || {}, want = b.app, old = [];
+  ['rubric', 'core', 'form', 'reader', 'admin'].forEach(function (f) { if (b[f] !== want) old.push(f + '.js'); });
+  if (!old.length) return;
+  window.MQ_STALE = true;
+  var d = document.createElement('div');
+  d.setAttribute('role', 'alert'); d.setAttribute('dir', 'ltr'); d.id = 'stale-files';
+  d.style.cssText = 'position:relative;z-index:99999;margin:0;padding:18px 22px;background:#7a1c2a;color:#fff;font:17px/1.5 Arial,sans-serif';
+  d.textContent = 'The website files are not all from the same version. Out of date or missing: ' + old.join(', ') +
+    '. Upload every file from the site folder to GitHub (replace the old ones), wait a minute, then reload this page with Ctrl+Shift+R.';
+  document.body.insertBefore(d, document.body.firstChild);
+})();
 (function () {
 'use strict';
+if (window.MQ_STALE) return;
 var MQ = window.MQ, $ = MQ.$, $$ = MQ.$$, esc = MQ.esc;
 var current = '';           // home | admin | reader
 var lastPlain = '';         // last non-reader address, for the Back button
@@ -19,6 +35,8 @@ function setNav() {
   if (u.isAdmin) links.push(['#/admin', 'Dashboard', 'admin']);
   if (u.teacher) links.push([u.isAdmin ? '#/mine' : '#/', 'My evaluations', 'home']);
   $('#nav').innerHTML = links.map(function (l) { return '<a href="' + l[0] + '" data-v="' + l[2] + '">' + l[1] + '</a>'; }).join('');
+  // an administrator who also evaluates: remember which of the two pages they last chose
+  if (u.isAdmin && u.teacher) $$('#nav a').forEach(function (a) { a.addEventListener('click', function () { MQ.lsSet('mq.land.' + u.email, a.getAttribute('data-v') === 'admin' ? 'admin' : 'mine'); }); });
   $('#who-name').textContent = u.name || u.email;
   $('#who-role').textContent = u.isAdmin ? 'Administrator' : 'Evaluator';
   $('#who-mail').textContent = u.email;
@@ -60,12 +78,16 @@ function drawHome() {
     h += '<p class="summ" dir="ltr"><b>' + done + '</b> of <b>' + a.length + '</b> submitted</p><div class="alist">';
     a.forEach(function (x) {
       var st = STATUS[x.status] || STATUS.not_started;
-      h += '<a class="acard ' + x.status + '" href="#/eval/' + esc(x.its) + '"><div class="ahead"><h3 dir="auto">' + esc(x.name || ('ITS ' + x.its)) + '</h3><span class="stc ' + x.status + '">' + st[0] + '</span></div>' +
-        '<p class="en">ITS ' + esc(x.its) + (x.trno ? ' · TRNO ' + esc(x.trno) : '') + (pick && x.year ? ' · <span class="yrchip">' + esc(x.year) + '</span>' : '') + (x.lockReason === 'closed' ? ' · <span class="yrchip cls">Closed</span>' : '') + '</p>' +
+      var nm = esc(x.name || ('ITS ' + x.its));
+      h += '<div class="acard ' + x.status + '" data-its="' + esc(x.its) + '"><div class="ahead"><h3 dir="auto">' + esc(x.name || ('ITS ' + x.its)) + '</h3><span class="stc ' + x.status + '">' + st[0] + '</span></div>' +
+        '<p class="en">ITS ' + esc(x.its) + (x.trno ? ' · TRNO ' + esc(x.trno) : '') + (pick && x.year ? ' · <span class="yrchip">' + esc(x.year) + '</span>' : '') + (x.lockReason === 'closed' ? ' · <span class="yrchip cls">Closed</span>' : '') + (x.slot === 6 ? ' · <span class="yrchip idr">Idara evaluator</span>' : '') + '</p>' +
+        (x.takhassus ? '<p class="tkrow">' + MQ.tkChip(x.takhassus) + '</p>' : '') +
         (x.topic ? '<p class="atopic" dir="auto">' + esc(x.topic) + '</p>' : '<p class="atopic none">Topic not entered yet</p>') +
         '<div class="ameta"><span dir="ltr">' + x.marks + ' of 10 marked' + (x.marks ? ' · total <b>' + x.total + '</b>' : '') + '</span><span dir="ltr" class="' + (x.hasPdf ? 'ok' : 'bad') + '">' + (x.hasPdf ? 'PDF ready' : 'No PDF yet') + '</span></div>' +
         '<div class="pbar" aria-hidden="true"><i style="width:' + x.marks * 10 + '%"></i></div>' +
-        (x.savedAt ? '<p class="en saved">Saved ' + esc(x.savedAt) + '</p>' : '') + '</a>';
+        (x.savedAt ? '<p class="en saved">Saved ' + esc(x.savedAt) + '</p>' : '') +
+        '<div class="aacts"><a class="btn gold go-pdf" href="#/eval/' + esc(x.its) + '" aria-label="Read the PDF and mark: ' + nm + '"><span class="bl"><span aria-hidden="true">📄</span> قراءة المقالة</span><span class="en">Read PDF</span></a>' +
+        '<a class="btn ghost go-marks" href="#/marks/' + esc(x.its) + '" aria-label="Marks entry only, without the PDF: ' + nm + '"><span class="bl"><span aria-hidden="true">✎</span> إدخال الدرجات</span><span class="en">Marks entry only</span></a></div></div>';
     });
     h += '</div>';
   }
@@ -77,14 +99,24 @@ function drawHome() {
 async function route() {
   if (!MQ.session) return;
   var hash = location.hash || '';
-  if (!/^#\/eval/.test(hash)) { lastPlain = hash; MQ.prevHash = lastPlain; }
+  if (!/^#\/(eval|marks)\//.test(hash)) { lastPlain = hash; MQ.prevHash = lastPlain; }
   else MQ.prevHash = lastPlain;
   var p = hash.replace(/^#\/?/, '').split('/'), u = MQ.session.user;
-  if (current === 'reader' && p[0] !== 'eval') await MQ.reader.close();
-  if (p[0] === 'eval' && p[1]) {
+  if (current === 'reader' && p[0] !== 'eval' && p[0] !== 'marks') await MQ.reader.close();
+  if ((p[0] === 'eval' || p[0] === 'marks') && p[1]) {
+    // #/eval/ITS = the thesis with the form beside it; #/marks/ITS = the form alone, the PDF is not downloaded unless asked for
     show('reader');
-    MQ.reader.open(decodeURIComponent(p[1]), p[2] ? decodeURIComponent(p[2]) : '');
+    MQ.reader.open(decodeURIComponent(p[1]), p[2] ? decodeURIComponent(p[2]) : '', { mode: p[0] === 'marks' ? 'marks' : 'pdf' });
     return;
+  }
+  if (u.isAdmin && u.teacher && !p[0]) {
+    // landing page of an administrator who is also an evaluator: their last choice, else their own students if they have any
+    var land = MQ.lsGet('mq.land.' + u.email);
+    if (land !== 'admin' && land !== 'mine') {
+      land = 'admin';
+      try { var as = await MQ.api('assignments'); if (as.assignments && as.assignments.length) land = 'mine'; } catch (e) { /* fall back to the dashboard */ }
+    }
+    location.replace('#/' + land); return;
   }
   if (u.isAdmin && p[0] !== 'mine') {
     if (p[0] !== 'admin') { location.replace('#/admin'); return; }

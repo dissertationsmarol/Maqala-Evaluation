@@ -1,3 +1,4 @@
+(window.MQ_BUILD = window.MQ_BUILD || {}).core = '2026-11-19c';
 /* Core: helpers, sign-in (Google Identity Services), API client, toast and dialogs. */
 (function () {
 'use strict';
@@ -7,6 +8,11 @@ var CFG = MQ.CFG = window.MAQALA_CONFIG || {};
 /* ---------- helpers ---------- */
 MQ.$ = function (s, r) { return (r || document).querySelector(s); };
 MQ.$$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+/** A student has up to six evaluators: slots 1-5, and slot 6 = the Idara evaluator. */
+MQ.SLOTS = [1, 2, 3, 4, 5, 6];
+MQ.slotName = function (n) { return n === 6 ? 'Idara evaluator' : 'Evaluator ' + n; };
+/** The student's takhassus (specialisation) as a small chip; empty string when the sheet has none. */
+MQ.tkChip = function (v) { return v ? '<span class="tkh" dir="auto"><i>\u0627\u0644\u062a\u062e\u0635\u0635</i>' + MQ.esc(v) + '</span>' : ''; };
 MQ.esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
 MQ.isObj = function (v) { return v && typeof v === 'object' && !Array.isArray(v); };
 MQ.clone = function (o) { return JSON.parse(JSON.stringify(o)); };

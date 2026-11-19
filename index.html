@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=2026-11-19c">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -64,8 +64,8 @@
 <section id="reader" hidden>
   <div id="edgeT" class="edgeT"><button type="button" id="hT" class="handleT" aria-label="Show the toolbar" aria-expanded="false">⌄</button></div>
   <div class="rbar" id="rbar">
-    <button type="button" class="btn ghost" id="rback">رجوع · Back</button>
-    <div class="rtitle"><b id="rname" dir="auto"></b><span id="rsub" class="en"></span></div>
+    <button type="button" class="btn ghost" id="rback"><span>رجوع</span><span class="en bk" dir="ltr">Back</span></button>
+    <div class="rtitle"><b id="rname"></b><div class="rline"><span id="rsub" class="en"></span><span id="rtk" class="rtk" dir="auto"></span></div></div>
     <div id="pdfctl" class="pdfctl" hidden>
       <button type="button" id="zout" aria-label="Zoom out">−</button><span id="zoomv">100%</span><button type="button" id="zin" aria-label="Zoom in">+</button><button type="button" id="zfit" aria-label="Fit width">⤢</button>
       <input id="pgno" type="number" min="1" inputmode="numeric" aria-label="Page number"><span id="pgtot"></span>
@@ -105,7 +105,7 @@
       </div>
       <div class="pstrip">
         <div class="rtotal"><b id="rtot">0</b><small>/100</small></div>
-        <div class="rprogress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Criteria marked"><i id="rprog"></i></div>
+        <div class="rprogress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Criteria marked"><div class="cdots" id="cdots"></div><div class="rpbar"><i id="rprog"></i></div></div>
         <div id="sync" class="sync" data-k="wait"><i></i><span></span></div>
       </div>
       <div id="obo" class="banner warn" hidden></div>
@@ -123,11 +123,11 @@
 <div id="toast" dir="auto" hidden role="status" aria-live="polite"></div>
 
 <script src="config.js"></script>
-<script src="rubric.js"></script>
-<script src="core.js"></script>
-<script src="form.js"></script>
-<script src="reader.js"></script>
-<script src="admin.js"></script>
-<script src="app.js"></script>
+<script src="rubric.js?v=2026-11-19c"></script>
+<script src="core.js?v=2026-11-19c"></script>
+<script src="form.js?v=2026-11-19c"></script>
+<script src="reader.js?v=2026-11-19c"></script>
+<script src="admin.js?v=2026-11-19c"></script>
+<script src="app.js?v=2026-11-19c"></script>
 </body>
 </html>

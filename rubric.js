@@ -1,3 +1,4 @@
+(window.MQ_BUILD = window.MQ_BUILD || {}).rubric = '2026-11-19c';
 // Rubric text transcribed from the two supplied PDFs. Shared by the evaluation form and the dashboard.
 /* ================= rubric data (transcribed from the two PDFs) ================= */
 var LEVELS=[

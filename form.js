@@ -1,3 +1,4 @@
+(window.MQ_BUILD = window.MQ_BUILD || {}).form = '2026-11-19c';
 /* The evaluation form: criteria cards, rubric, result, comments, autosave to the spreadsheet. */
 (function () {
 'use strict';
@@ -134,7 +135,7 @@ function renderCard(c, d) {
 
 /* ================= building the views (once) ================= */
 function buildScore() {
-  var h = '<div class="card topic"><label for="f-topic">موضوع المقالة<span class="en">Topic of the maqala</span></label><textarea id="f-topic" dir="auto" rows="2"></textarea><p class="hint">Taken from the sheet when it is there. Add or correct it here.</p></div>';
+  var h = '<div class="card topic"><p class="tkrow" id="s-tk" hidden></p><label for="f-topic">موضوع المقالة<span class="en">Topic of the maqala</span></label><textarea id="f-topic" dir="auto" rows="2"></textarea><p class="hint">Taken from the sheet when it is there. Add or correct it here.</p></div>';
   SECTIONS.forEach(function (s) {
     h += '<div class="sec-h"><div><h2>' + s.ar + '</h2><p class="en">' + s.en + '</p></div><div class="sec-sub"><b id="st-' + s.id + '">0</b>/' + SECMAX[s.id] + '</div></div>';
     CRIT.filter(function (c) { return c.sec === s.id; }).forEach(function (c) { h += cardHTML(c); });
@@ -146,10 +147,10 @@ function buildScore() {
 function buildComments() {
   var h = '<p class="hint pad">التعليقات بحسب الأقسام الكبرى، ثم تعليق عام في النهاية.<br><span class="en">Comments by main part, then one overall comment at the end.</span></p>';
   SECTIONS.forEach(function (s) {
-    h += '<div class="card seccm"><label for="sc-' + s.id + '">تعليقات ' + s.ar + '<span class="en">Comments on ' + s.en + '</span></label>' + CMHTML.replace(/__ID__/g, 'sc-' + s.id).replace('__ATTR__', 'data-sec="' + s.id + '"') + '</div>';
+    h += '<div class="card seccm"><label for="sc-' + s.id + '">تعليقات ' + s.ar + '<span class="en">Comments on ' + s.en + '</span></label><div class="gs" id="gs-' + s.id + '"></div>' + CMHTML.replace(/__ID__/g, 'sc-' + s.id).replace('__ATTR__', 'data-sec="' + s.id + '"') + '</div>';
   });
   h += '<div class="card"><h3 class="h3">كل التعليقات في مكان واحد</h3><p class="en">All your section comments, exactly as written, so you can write your own summary below</p><div id="collated" class="collate empty" style="margin-top:10px"></div><button type="button" class="btn ghost wide" id="btn-insert">أضفها إلى تعليقي العام <span class="en">Add them to the overall comment</span></button></div>';
-  h += '<div class="card seccm"><label for="f-comment">تعليقات عامة<span class="en">Overall comment</span></label>' + CMHTML.replace(/__ID__/g, 'f-comment').replace('__ATTR__', '') + '</div>';
+  h += '<div class="card seccm"><label for="f-comment">تعليقات عامة<span class="en">Overall comment</span></label><div class="gs" id="gs-all"></div>' + CMHTML.replace(/__ID__/g, 'f-comment').replace('__ATTR__', '') + '</div>';
   $('#fv-comments').innerHTML = h;
 }
 function renderRubric() {
@@ -178,7 +179,7 @@ function renderRubric() {
 }
 function buildResult() {
   $('#fv-result').innerHTML =
-    '<div class="card"><div class="res-head"><div><h2 id="r-name" dir="auto"></h2><p id="r-topic" dir="auto" class="rtopic"></p><p class="en" id="r-meta"></p></div>' +
+    '<div class="card"><div class="res-head"><div><h2 id="r-name" dir="auto"></h2><p id="r-tk" class="tkrow" hidden></p><p id="r-topic" dir="auto" class="rtopic"></p><p class="en" id="r-meta"></p></div>' +
     '<div class="bigtot"><b id="r-total">0</b><small>/100</small></div></div>' +
     '<table class="rt" style="margin-top:10px"><tbody id="r-body"></tbody></table><p class="missing" id="r-missing"></p></div>' +
     '<div class="card"><h3 class="h3">التعليقات <span class="en">Comments</span></h3><div id="r-comments" class="collate" style="margin-top:8px"></div></div>' +
@@ -196,6 +197,7 @@ function renderScore(d) {
   CRIT.forEach(function (c) { renderCard(c, d); });
   SECTIONS.forEach(function (s) { $('#st-' + s.id).textContent = secTotal(d, s.id); setVal($('#sc-' + s.id), secComment(d, s.id)); });
   setVal($('#f-comment'), d.comment || '');
+  renderSummary(d);
   var ch = collatedHTML(d, false), cb = $('#collated');
   cb.classList.toggle('empty', !ch);
   cb.innerHTML = ch || 'Nothing yet. Comments you write under each of the three parts appear here.';
@@ -222,6 +224,7 @@ function renderResult() {
   var d = F.D;
   $('#r-name').textContent = F.student.name || 'Student ' + F.student.its;
   $('#r-topic').textContent = d.topic || '';
+  $('#r-tk').innerHTML = MQ.tkChip(F.student.takhassus); $('#r-tk').hidden = !F.student.takhassus;
   $('#r-meta').textContent = 'ITS ' + F.student.its + (F.student.trno ? ' · TRNO ' + F.student.trno : '') + ' · Evaluator ' + (F.evaluator.name || '');
   $('#r-total').textContent = total(d);
   var h = '', miss = [];
@@ -245,15 +248,121 @@ function renderResult() {
   $('#btn-submit').innerHTML = (F.status === 'complete' ? 'تم الإرسال · أعد الإرسال بعد التعديل <span class="en">Submitted · resubmit after changes</span>' : 'إرسال التقييم النهائي <span class="en">Submit final evaluation</span>');
   $('#btn-submit').disabled = !!F.locked;
 }
+/* ================= your grades in words (comments tab) =================
+   Above each comment box: the grade the evaluator chose, in words, and what the rubric itself says for that grade, so the
+   comment can be written from it. Nothing is generated: it is the rubric wording and the marks, arranged. */
+var sumKey = '', sumOpen = {};
+function sentences(t) { return String(t || '').split('.').map(function (x) { return x.trim(); }).filter(Boolean); }
+function verdictOf(avg) { return LEVELS[Math.min(5, Math.max(1, Math.round(avg))) - 1]; }
+function numBtn(c) { return '<button type="button" class="gs-n" data-act="godot" data-cid="' + c.id + '" title="Go to criterion ' + c.n + '" aria-label="Go to criterion ' + c.n + '">' + c.n + '</button>'; }
+function secFacts(d, s) {
+  var out = { s: s, marked: [], missing: [], sum: 0 };
+  CRIT.filter(function (c) { return c.sec === s.id; }).forEach(function (c) {
+    var m = mk(d, c.id);
+    if (m == null) { out.missing.push(c); return; }
+    var lv = levelOf(c, m); out.marked.push({ c: c, m: m, lv: lv }); out.sum += lv;
+  });
+  out.total = secTotal(d, s.id); out.max = SECMAX[s.id];
+  out.verdict = out.marked.length ? verdictOf(out.sum / out.marked.length) : null;
+  return out;
+}
+function overviewText(d, s) {
+  var f = secFacts(d, s), t = s.ar + ' (' + f.total + '/' + f.max + ')' + (f.verdict ? ' — غالبًا ' + f.verdict.ar : '');
+  f.marked.forEach(function (x) { t += '\n• ' + x.c.ar + ': ' + LEVELS[x.lv - 1].ar + ' (' + x.m + '/' + x.c.max + ')'; });
+  return t;
+}
+function wordingText(c, d) {
+  var m = mk(d, c.id); if (m == null) return '';
+  var lv = levelOf(c, m); return '• ' + c.ar + ' (' + LEVELS[lv - 1].ar + '): ' + sentences(c.lv[lv - 1]).join('. ') + '.';
+}
+function sectionSummaryHTML(d, s) {
+  var f = secFacts(d, s);
+  if (!f.marked.length) return '<p class="gs-line">لم تُقيَّم معايير هذا القسم بعد. <span class="en">Nothing marked in this part yet. Your grades in words will appear here.</span></p>';
+  var h = '<p class="gs-v"><span class="gs-t" dir="ltr">' + f.total + '/' + f.max + '</span> غالبًا <b class="l' + f.verdict.n + '">' + f.verdict.ar + '</b> <span class="en">Mostly ' + f.verdict.en + ' · ' + f.marked.length + ' of ' + (f.marked.length + f.missing.length) + ' criteria marked</span></p>';
+  var strong = f.marked.filter(function (x) { return x.lv <= 2; }).map(function (x) { return numBtn(x.c); }).join('');
+  var weak = f.marked.filter(function (x) { return x.lv >= 4; }).map(function (x) { return numBtn(x.c); }).join('');
+  if (strong) h += '<p class="gs-line">الأقوى <span class="en">Strongest (A or B)</span> ' + strong + '</p>';
+  if (weak) h += '<p class="gs-line">يحتاج إلى عناية <span class="en">Needs attention (D)</span> ' + weak + '</p>';
+  if (f.missing.length) h += '<p class="gs-line">لم يُقيَّم بعد <span class="en">Not marked yet</span> ' + f.missing.map(numBtn).join('') + '</p>';
+  var rows = CRIT.filter(function (c) { return c.sec === s.id; }).map(function (c) {
+    var m = mk(d, c.id);
+    if (m == null) return '<div class="gs-row">' + numBtn(c) + '<div class="gs-b"><p class="gs-title" dir="auto">' + esc(c.ar) + '</p><p class="gs-g none">لم يُقيَّم بعد · Not marked yet</p></div></div>';
+    var lv = levelOf(c, m), L = LEVELS[lv - 1], pts = sentences(c.lv[lv - 1]);
+    var key = 'c-' + c.id;
+    return '<div class="gs-row">' + numBtn(c) + '<div class="gs-b"><p class="gs-title" dir="auto">' + esc(c.ar) + '</p>' +
+      '<p class="gs-g l' + lv + '"><b>' + L.ar + '</b> <span class="en">' + L.en + ' (' + L.letter + ') · ' + m + ' out of ' + c.max + '</span></p>' +
+      '<details data-sk="' + key + '"' + (sumOpen[key] ? ' open' : '') + '><summary>ماذا يقول المعيار لهذا المستوى <span class="en">What the rubric says for this grade</span></summary><ul>' +
+      pts.map(function (p) { return '<li dir="auto">' + esc(p) + '.</li>'; }).join('') + '</ul>' +
+      '<div class="gs-act"><button type="button" class="btn ghost sm" data-act="addword" data-cid="' + c.id + '"' + (F.locked ? ' disabled' : '') + '>＋ أضفه إلى تعليقات ' + s.ar + ' <span class="en">Add to my comment</span></button></div></details></div></div>';
+  }).join('');
+  var fk = 'sec-' + s.id;
+  h += '<details class="gs-fold" data-sk="' + fk + '"' + (sumOpen[fk] ? ' open' : '') + '><summary>كل معيار بالكلمات <span class="en">Each criterion in words · ' + f.marked.length + '</span></summary>' + rows + '</details>';
+  h += '<div class="gs-act"><button type="button" class="btn ghost sm" data-act="addover" data-sec="' + s.id + '"' + (F.locked ? ' disabled' : '') + '>＋ أضف النظرة العامة إلى تعليقاتي <span class="en">Add this overview to my comment</span></button></div>';
+  return h;
+}
+function overallSummaryHTML(d) {
+  var facts = SECTIONS.map(function (s) { return secFacts(d, s); }), n = 0, sum = 0, by = [0, 0, 0, 0, 0, 0];
+  facts.forEach(function (f) { f.marked.forEach(function (x) { n++; sum += x.lv; by[x.lv]++; }); });
+  if (!n) return '';
+  var V = verdictOf(sum / n), pct = function (f) { return f.total / f.max; };
+  var h = '<p class="gs-v"><span class="gs-t" dir="ltr">' + total(d) + '/100</span> غالبًا <b class="l' + V.n + '">' + V.ar + '</b> <span class="en">Overall: mostly ' + V.en + ' · ' + n + ' of 10 criteria marked</span></p>';
+  h += '<p class="gs-line" dir="ltr">' + LEVELS.map(function (L, i) { return by[i + 1] ? '<span class="gs-c l' + (i + 1) + '">' + L.en + ' × ' + by[i + 1] + '</span>' : ''; }).join(' ') + '</p>';
+  var done = facts.filter(function (f) { return f.missing.length === 0; });
+  if (done.length > 1) {
+    var hi = done.slice().sort(function (a, b) { return pct(b) - pct(a); }), lo = hi[hi.length - 1];
+    if (pct(hi[0]) !== pct(lo)) h += '<p class="gs-line">الأقوى <span class="en">Strongest part</span> <b>' + hi[0].s.ar + '</b> · الأضعف <span class="en">Weakest part</span> <b>' + lo.s.ar + '</b></p>';
+  }
+  h += '<div class="gs-act"><button type="button" class="btn ghost sm" data-act="addall"' + (F.locked ? ' disabled' : '') + '>＋ أضف المجموع إلى تعليقي العام <span class="en">Add the total to my overall comment</span></button></div>';
+  return h;
+}
+function renderSummary(d) {
+  var key = JSON.stringify([d.marks, F.locked]);
+  if (key === sumKey) return;
+  sumKey = key;
+  SECTIONS.forEach(function (s) { var el = $('#gs-' + s.id); if (el) { el.innerHTML = sectionSummaryHTML(d, s); } });
+  var all = $('#gs-all'); if (all) { var ah = overallSummaryHTML(d); all.innerHTML = ah; all.hidden = !ah; }
+}
+function addToComment(field, text) {
+  if (!text) return;
+  var cur = field === 'comment' ? (F.D.comment || '') : secComment(F.D, field), v = cur + (cur.trim() ? '\n' : '') + text;
+  var el = $(field === 'comment' ? '#f-comment' : '#sc-' + field); if (el) el.value = v;
+  edit(field === 'comment' ? { comment: v } : { sec: o1(field, v) });
+  if (!F.locked) MQ.toast('Added to your comment — edit it as you like');
+}
+/** Ten numbered dots in the header: the grade colour once a criterion is marked, a tap jumps to that criterion. */
+function buildDots() {
+  var h = '';
+  CRIT.forEach(function (c) { h += '<button type="button" class="cdot" data-act="godot" data-cid="' + c.id + '" aria-label="Criterion ' + c.n + ', not marked yet">' + c.n + '</button>'; });
+  $('#cdots').innerHTML = h;
+}
+function renderDots(d) {
+  CRIT.forEach(function (c) {
+    var b = $('#cdots [data-cid="' + c.id + '"]'); if (!b) return;
+    var m = mk(d, c.id), lv = m == null ? 0 : levelOf(c, m);
+    b.className = 'cdot' + (lv ? ' on l' + lv : '');
+    b.setAttribute('aria-label', 'Criterion ' + c.n + (m == null ? ', not marked yet' : ', marked ' + m + ' out of ' + c.max));
+    b.title = m == null ? 'Criterion ' + c.n + ': not marked' : 'Criterion ' + c.n + ': ' + m + '/' + c.max;
+  });
+}
+function gotoCriterion(cid) {
+  if (tab !== 'score') api.setTab('score');
+  var el = $('#card-' + cid); if (!el) return;
+  var box = $('#pbodyL'), top = el.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 6;
+  var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  try { box.scrollTo({ top: top, behavior: calm ? 'auto' : 'smooth' }); } catch (e) { box.scrollTop = top; }
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+}
 function renderHeader() {
   var d = F.D;
+  $('#s-tk').innerHTML = MQ.tkChip(F.student.takhassus); $('#s-tk').hidden = !F.student.takhassus;
   $('#rtot').textContent = total(d); $('#ctot').textContent = total(d);
+  renderDots(d);
   $('#rprog').style.width = (markedCount(d) * 10) + '%';
   $('#rprog').parentNode.setAttribute('aria-valuenow', String(markedCount(d) * 10));
 }
 function applyLock() {
   $('#reader').classList.toggle('locked', !!F.locked);
-  $$('#fv-score input, #fv-score textarea, #fv-score button[data-act=mark], #fv-score button[data-act=sub], #fv-comments textarea, #fv-comments .mics button, #btn-submit').forEach(function (el) { el.disabled = !!F.locked; });
+  $$('#fv-score input, #fv-score textarea, #fv-score button[data-act=mark], #fv-score button[data-act=sub], #fv-comments textarea, #fv-comments .mics button, #fv-comments button[data-act=addword], #fv-comments button[data-act=addover], #fv-comments button[data-act=addall], #btn-submit').forEach(function (el) { el.disabled = !!F.locked; });
   $('#btn-insert').disabled = !!F.locked || !collatedHTML(F.D, false);
   $('#lockbanner').hidden = !F.locked;
   $('#lockbanner').textContent = F.lockReason === 'closed' ? 'أُغلقت هذه السنة · This year has been closed. Marks are locked.' : 'انتهى الموعد · The deadline has passed. Marks are locked.';
@@ -407,6 +516,14 @@ function onClick(e) {
   if (b) {
     var act = b.getAttribute('data-act');
     if (act === 'gocm') { if (callbacks.openComments) callbacks.openComments(b.getAttribute('data-sec')); return; }
+    if (act === 'godot') { gotoCriterion(b.getAttribute('data-cid')); return; }
+    if (act === 'addword') { var wc = CR[b.getAttribute('data-cid')]; if (wc) addToComment(wc.sec, wordingText(wc, F.D)); return; }
+    if (act === 'addover') { var so = SECTIONS.filter(function (x) { return x.id === b.getAttribute('data-sec'); })[0]; if (so) addToComment(so.id, overviewText(F.D, so)); return; }
+    if (act === 'addall') {
+      var lines = ['المجموع: ' + total(F.D) + '/100'];
+      SECTIONS.forEach(function (s) { var f = secFacts(F.D, s); if (f.marked.length) lines.push(s.ar + ': ' + f.total + '/' + f.max + ' — غالبًا ' + f.verdict.ar); });
+      addToComment('comment', lines.join('\n')); return;
+    }
     var card = b.closest('.crit'), cid = card && card.getAttribute('data-cid'), d = F.D;
     if (act === 'lvl') { preview[cid] = +b.getAttribute('data-l'); renderCard(CR[cid], d); }
     else if (act === 'mark') {
@@ -466,9 +583,10 @@ var api = MQ.form = {
     callbacks = cb || {};
     if (api.mounted) return;
     api.mounted = true;
-    buildScore(); buildComments(); buildResult(); renderRubric(); renderMics();
+    buildScore(); buildDots(); buildComments(); buildResult(); renderRubric(); renderMics();
     var root = $('#reader');
     root.addEventListener('click', onClick);
+    root.addEventListener('toggle', function (e) { var t = e.target; if (t && t.getAttribute && t.getAttribute('data-sk')) sumOpen[t.getAttribute('data-sk')] = t.open; }, true);
     root.addEventListener('input', onInput);
     window.addEventListener('beforeunload', function (e) { if (F && (F.inflight || Object.keys(F.pending).length)) { e.preventDefault(); e.returnValue = ''; } });
     function bg() { if (F && Object.keys(F.pending).length) flush({ keepalive: true }).catch(function () {}); }
@@ -491,7 +609,7 @@ var api = MQ.form = {
       deadline: r.deadline, locked: !!r.locked && !MQ.session.user.isAdmin, lockReason: r.lockReason || '', pending: {}, inflight: false, lastErr: null, timer: null, retry: 0,
       chain: Promise.resolve(), rev: 0, refreshing: false
     };
-    preview = {};
+    preview = {}; sumKey = ''; sumOpen = {};
     // changes typed on this device that never reached the server (closed tab, lost connection)
     var raw = MQ.lsGet(pkey());
     if (raw) {
